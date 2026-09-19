@@ -14,22 +14,25 @@
 # limitations under the License.
 
 from typing import List, Tuple, Dict, Union, Any
-import torch
 import numpy as np
 import os
 from agent_system.environments.prompts import *
 from collections import defaultdict
 
 def to_numpy(data):
-    if isinstance(data, torch.Tensor):
-        data = data.detach().cpu().numpy()
-    elif isinstance(data, np.ndarray):
-        pass
-    elif isinstance(data, (int, float, bool, Tuple, List)):
-        data = np.array(data)
-    else:
-        raise ValueError(f"Unsupported type: {type(data)})")
-    return data
+    if isinstance(data, np.ndarray):
+        return data
+    if isinstance(data, (int, float, bool, Tuple, List)):
+        return np.array(data)
+
+    type_name = type(data).__name__
+    if type_name == "Tensor":
+        import torch
+
+        if isinstance(data, torch.Tensor):
+            return data.detach().cpu().numpy()
+
+    raise ValueError(f"Unsupported type: {type(data)})")
 
 class EnvironmentManagerBase:
     def __init__(self, envs, projection_f, config):

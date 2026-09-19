@@ -1,0 +1,52 @@
+# Legacy filename; prefer multidomain_fresh_178.yaml (34×6 = full train pass).
+# Kept for backward-compatible scripts referencing this path.
+
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+seed: 42
+max_concurrency: 6
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: false
+inject_same_domain_only: true
+
+segment_size: 34
+num_segments: 6
+task_split_name: train
+allow_task_resampling: false
+domain_weights:
+  airline: 30
+  retail: 74
+  telecom: 74
+
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 16
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+
+cluster_novelty_threshold: 0.05
+nominate_min_cluster_support: 1
+nominate_min_utility: 0.0
+max_new_agents_per_round: 1
+dispatch_only_new_agents: true
+probation_games: 3
+allow_provisional_org_edits: false
+require_same_domain_for_nominate: true
+no_spec_mode: editor_commit
+
+enable_spec_vs_exec: false
+admit_num_tasks: 8
+admit_min_advantage: 0.0
+admit_accept_ties: false
+admit_on_fail_action: remove
+admit_min_utility: 0.60
+admit_min_support: 3
+
+probation_min_games: 3
+probation_min_wins: 2
+remove_after_rejected_windows: 2
+
+agent_name: sage_tau2

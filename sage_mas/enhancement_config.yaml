@@ -1,0 +1,126 @@
+# Enhancement configuration for online evolution
+# Enable skill context enrichment to help weak/mid models execute better
+
+enhancement:
+  # ============================================================================
+  # Skill Context Enhancement
+  # ============================================================================
+  skill_context:
+    enabled: true
+    max_lookahead: 3
+    include_rationale: true
+    loop_threshold: 2
+
+    # State hint patterns for ALFWorld
+    state_hint_patterns:
+      navigation:
+        keywords: ["go to"]
+        hint_default: "Verify the location exists and is reachable"
+
+      take_object:
+        keywords: ["take", "from"]
+        conditions:
+          visible: true
+        hint_true: "Confirmed: {target} is visible"
+        hint_false: "Search for {target} in this location"
+
+      cool_operation:
+        keywords: ["cool", "with"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to cool in fridge"
+        hint_false: "Must be holding object before cooling"
+
+      heat_operation:
+        keywords: ["heat", "with"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to heat in microwave"
+        hint_false: "Must be holding object before heating"
+
+      clean_operation:
+        keywords: ["clean", "with"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to clean"
+        hint_false: "Must be holding object before cleaning"
+
+      place_object:
+        keywords: ["move", "to"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to place at destination"
+        hint_false: "Must be holding object to place it"
+
+      open_container:
+        keywords: ["open"]
+        hint_default: "Check if container is currently closed"
+
+      close_container:
+        keywords: ["close"]
+        hint_default: "Check if container is currently open"
+
+    # Warning patterns
+    warning_patterns:
+      loop_detection:
+        navigation_loop:
+          keywords: ["go to"]
+          warning: "Avoid revisiting same location repeatedly; explore new areas"
+
+        container_loop:
+          keywords: ["open", "close"]
+          warning: "Avoid open/close loops; take or place object before closing"
+
+      operation_warnings:
+        cool_sequence:
+          keywords: ["cool"]
+          warning: "Open fridge BEFORE cooling; close AFTER cooling"
+
+        heat_sequence:
+          keywords: ["heat"]
+          warning: "Open microwave BEFORE heating; close AFTER heating"
+
+    # Verb categories for protocol decomposition
+    verb_categories:
+      navigate: ["go", "look", "examine"]
+      acquire: ["take", "pick", "grab", "get"]
+      transform: ["cool", "heat", "clean", "wash"]
+      container: ["open", "close"]
+      place: ["move", "put", "place"]
+      use: ["use", "toggle", "turn"]
+
+    phase_descriptions:
+      navigate: "Navigate to required location"
+      acquire: "Pick up the target object"
+      transform: "Apply required operation to object"
+      container: "Manage container state"
+      place: "Place object at destination"
+      use: "Use the required tool"
+
+  # ============================================================================
+  # Task Decomposition
+  # ============================================================================
+  task_decomposition:
+    enabled: true
+    mode: "infer_from_skills"
+
+  # ============================================================================
+  # Skill Verification (currently offline only)
+  # ============================================================================
+  skill_verification:
+    enabled: false
+
+  # ============================================================================
+  # Meta Dispatcher (not yet integrated)
+  # ============================================================================
+  meta_dispatcher:
+    enabled: false
+
+  # ============================================================================
+  # Runtime Integration
+  # ============================================================================
+  runtime:
+    use_enhanced_runtime: true
+    enable_enriched_context: true
+    enable_task_decomposition: true
+    enable_meta_dispatcher: false

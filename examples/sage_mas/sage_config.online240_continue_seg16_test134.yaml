@@ -1,0 +1,144 @@
+# Freeze test134 (valid_unseen) for latest evolved SAGE after online240_continue_seg16.
+# Seeds: 7-agent org + skill bank from that run (Executor+Clean/Inspect/Cool/TrackMultiple/Heat/TrackPlace).
+
+sage:
+  allow_provisional_org_edits: false
+  seed_organization_path: logs/sage_mas/online240_continue_seg16/active_organization.json
+  seed_skill_bank_path: logs/sage_mas/online240_continue_seg16/skill_bank.json
+  seed_skill_statuses:
+    - verified
+    - provisional
+  redundancy_threshold: 0.90
+  disable_merge: true
+
+  distillation:
+    mode: heuristic
+    llm_protocol_overlay: false
+    model: gemini-2.5-flash
+    temperature: 0.0
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+    max_evidence_trajectories: 3
+    max_steps_per_trajectory: 15
+    max_fragments: 5
+    exclude_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+
+  clustering:
+    enabled: false
+
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+    min_uses_for_promotion: 1
+    min_uses_for_pruning: 3
+    require_positive_mu_for_verify: false
+    min_marginal_utility: 0.0
+    relative_credit_to_baseline: false
+    min_protocol_coverage: 0.5
+    min_adherence_for_use: 0.34
+    min_adherence_for_verify: 0.34
+    combine_adherence_with_effect: true
+    require_task_win_for_success: false
+
+  skill_transfer:
+    require_inject_ready_for_org: false
+    require_positive_mu_for_injection: false
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 999
+    min_failure_rate: 0.0
+    min_assignment_gap: 0.1
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    max_new_agents_per_round: 0
+    cluster_by: capability
+    add_when_uncovered_capability: false
+    require_executable_bank_for_add_agent: false
+    dispatch_only_new_agents: true
+    probation_games: 3
+    require_executable_protocol: true
+    require_trajectory_executable_protocol: false
+    min_protocol_adherence_for_add_agent: 0.34
+    require_positive_mu_for_add_agent: false
+    min_marginal_utility_for_add_agent: 0.0
+
+  executor_dispatch:
+    enabled: true
+    allow_dormant: false
+    auto_assign_single: true
+    require_accepted_for_primary: true
+    prefer_matching_specialist: true
+    probation_primary_quota: 8
+
+  shadow:
+    enabled: false
+
+  online:
+    # test134 valid_unseen
+    num_games: 134
+    collection_dataset: valid_unseen
+    segment_size: 134
+    parallel_envs: 32
+    api_concurrency: 32
+    llm_timeout: 90
+    llm_max_retries: 1
+    game_selection: first
+    seed: 1
+    temperature: 0.0
+    executor_model: gemini-2.5-flash
+    specialist_model: gemini-2.5-flash
+    acceptor_model: gemini-2.5-flash
+    max_skills_per_round: 0
+    skip_shadow: true
+    freeze_organization: true
+    commit_org_on_last_segment: false
+    propose_org_for_unassigned_skills: false
+    org_warmup_segments: 0
+    actor_promotion_probe: false
+    ignore_assigned_skills: false
+    max_advisors: 0
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: false
+    stop_when_no_candidates: true
+    gate_injected_skills: true
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    prefer_proven_skills: true
+    require_positive_mu_for_injection: false
+    min_marginal_utility: 0.0
+    paired_mu_probe: false
+    run_control_eval_for_credit: false
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+    val_eval:
+      enabled: false
+    test_eval:
+      enabled: false
+
+  agents: []
+
+  enable_action_guards: false
+  compact_alfworld_prompts: false

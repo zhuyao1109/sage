@@ -1,0 +1,29 @@
+# Telecom train smoke: 5 tasks from official train split (74).
+# Uses telecom-workflow policy (NL device actions) + telecom prompt branch.
+# cd ~/verl-agent/tau2-bench
+# PYTHONPATH=.. uv run python -m sage_tau2.runners.online_tau2 \
+#   --config ../sage_tau2/configs/telecom_smoke_train5.yaml \
+#   --output ../logs/sage_tau2/telecom_smoke_train5 \
+#   --llm-config ../examples/prompt_agent/llm_config.yaml
+
+domain: telecom-workflow
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+task_split_name: train
+allow_task_resampling: false
+segment_size: 5
+num_segments: 1
+seed: 42
+max_concurrency: 2
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+inject_same_domain_only: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 8
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+agent_name: sage_tau2

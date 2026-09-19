@@ -15,7 +15,6 @@
 
 from typing import List, Tuple, Dict, Union, Any
 from collections import defaultdict
-import torch
 import numpy as np
 from functools import partial
 import os
@@ -388,7 +387,13 @@ class WebshopEnvironmentManager(EnvironmentManagerBase):
         super().__init__(envs, projection_f, config)
     
     def reset(self, kwargs) -> Dict[str, Any]:
-        obs, infos = self.envs.reset()
+        goal_indices = None
+        if isinstance(kwargs, dict):
+            goal_indices = kwargs.get("goal_indices") or kwargs.get("goal_idxs")
+        if goal_indices is not None:
+            obs, infos = self.envs.reset(goal_indices=list(goal_indices))
+        else:
+            obs, infos = self.envs.reset()
         self.tasks = self.extract_task(obs)
         obs = self.format_obs(obs)
         # infos = [None] * self.envs.num_envs

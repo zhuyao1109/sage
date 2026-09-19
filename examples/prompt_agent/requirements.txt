@@ -1,0 +1,8 @@
+omegaconf
+pyyaml
+openai
+numpy
+ray[default]
+gymnasium==0.29.1
+alfworld
+textworld

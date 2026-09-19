@@ -91,6 +91,9 @@ celerybeat-schedule
 
 # dotenv
 .env
+examples/prompt_agent/llm_config.yaml
+examples/prompt_agent/llm_config.yaml.*
+examples/prompt_agent/*.local.yaml
 
 # virtualenv
 venv/
@@ -131,4 +134,17 @@ outputs
 data/
 .tmp
 *ports
+
+# Unchanged third-party checkouts (each has its own remote).
+/AReaL/
+/externals/
+
+# tau2-bench domain data is part of the integration; drop dumps and runtime.
+!tau2-bench/data/
+!tau2-bench/data/tau2/
+!tau2-bench/data/tau2/**
+tau2-bench/data/tau2/results/
+tau2-bench/data/simulations/
+tau2-bench/.venv/
+tau2-bench/.env
 

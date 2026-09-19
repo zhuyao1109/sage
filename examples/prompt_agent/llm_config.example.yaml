@@ -1,0 +1,43 @@
+openai:
+  base_url: "http://YOUR_PROXY_HOST:PORT/v1"
+  # Keep credentials out of YAML: export OPENAI_API_KEY before running.
+  api_key: null
+  model: "gpt-4o-mini"
+  # Optional: new-api channel group (sent as JSON "group" on chat completions).
+  group: default
+  temperature: 0.4
+  # Seconds; avoids multi-hour hangs when the proxy stops responding.
+  timeout: 120
+  max_retries: 2
+
+alfworld:
+  data_path: "/path/to/data/alfworld"
+  max_steps: 50
+  history_length: 2
+  parallel_envs: 20
+  api_concurrency: 20
+  num_cpus_per_worker: 0.05
+  save_trajectories: true
+
+webshop:
+  max_steps: 15
+  history_length: 0
+  parallel_envs: 4
+  api_concurrency: 4
+  num_cpus_per_worker: 0.1
+  # Optional: override train-split upper bound (default fallback 12000).
+  # total_goals: 12087
+  fallback_total_goals: 12000
+
+# SkillMAS protocol: both phases use valid_unseen (134 games).
+# Phase 1 samples a fixed 70-game subset (task-family-proportional) for guidance.
+# Phase 2 evaluates on the full 134-game unseen split.
+phases:
+  protocol: "skillmas"
+  guidance:
+    num_games: 70
+    sampling_seed: 1
+  test:
+    num_games: 134
+    use_guidance_examples: true
+    max_guidance_examples: 3

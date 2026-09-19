@@ -1,0 +1,16 @@
+# Tiny end-to-end smoke (2 tasks x 1 segment). Does not touch logs/sage_mas.
+domain: airline
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+segment_size: 2
+num_segments: 1
+seed: 42
+max_concurrency: 1
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 8
+agent_name: sage_tau2

@@ -1,0 +1,25 @@
+---
+description: Do not add hand-written ALFWorld expert strategies without explicit user permission
+alwaysApply: true
+---
+
+# No hand-written expert scaffolding
+
+Do **not** reintroduce ALFWorld domain expert strategies unless the user explicitly asks.
+
+Forbidden without permission:
+- Family hard rules / stage checklists injected into prompts
+- Action guards that rewrite or force admissible actions (`enable_action_guards`, `check_action`, `enforce_action_text`)
+- Visited-location memory injected into prompts (`VisitedLocationMemory`, `use_visited_location_memory`)
+- Search priors or other hand-coded task-family policies
+
+Deleted modules (do not resurrect casually):
+- `sage_mas/action_guards.py`
+- `sage_mas/runtime_memory.py`
+
+Related flags must stay off / no-op:
+- `enable_action_guards=false`
+- `use_visited_location_memory=false`
+- `compact_alfworld_prompts` must not inject expert rules
+
+Allowed: environment template, org/skill protocols learned by the pipeline, Executor LLM dispatch.

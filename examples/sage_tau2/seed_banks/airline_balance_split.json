@@ -1,0 +1,66 @@
+[
+  {
+    "skill_name": "report_gift_card_and_certificate_balances_separately",
+    "description": "When the customer asks for gift-card and certificate balances, compute each payment type separately and state both totals. Never answer with only the combined sum of gift cards + certificates.",
+    "precondition": "User asks how much they have on gift cards and/or certificates (often both in one request).",
+    "action_protocol": [
+      "get_user_details(user_id=?)",
+      "calculate(expression=sum of gift_card amounts only)",
+      "calculate(expression=sum of certificate amounts only)",
+      "tell_user(gift_card_total=? and certificate_total=? as two separate numbers; do not report only gift_cards+certificates)"
+    ],
+    "expected_effect": "Customer-visible reply contains both category totals (e.g. gift cards 327 and certificates 1000), matching communicate checks for each figure.",
+    "capability_key": "airline.balances.split_payment_types",
+    "skill_id": "seed_airline_balance_split_v1",
+    "status": "verified",
+    "support_count": 2,
+    "evidence_ids": [
+      "seed:task14_communicate_pattern"
+    ],
+    "domain": "airline",
+    "metadata": {
+      "seed": true,
+      "source": "manual_seed_v1",
+      "ablation": "balance_split_vs_combined_sum",
+      "skill_credit": {
+        "uses": 2,
+        "successes": 2,
+        "score": 0.75,
+        "events": []
+      },
+      "utility": 0.75,
+      "credit_seeded_from_birth": true
+    }
+  },
+  {
+    "skill_name": "use_dob_field_on_passenger_writes",
+    "description": "When calling book_reservation or update_reservation_passengers, each passenger object must use the field name dob (YYYY-MM-DD). Do not use date_of_birth or other aliases — the tool schema rejects them.",
+    "precondition": "About to book a reservation or update passenger details; passenger birth dates are known from user profile or prior reservation.",
+    "action_protocol": [
+      "copy_dob_from_user_or_existing_reservation_passengers",
+      "book_reservation|update_reservation_passengers(passengers=[{first_name, last_name, dob}, ...])"
+    ],
+    "expected_effect": "Passenger write tools accept the call (no Missing required parameter: 'passengers.N.dob' / unexpected date_of_birth).",
+    "capability_key": "airline.passengers.dob_schema",
+    "skill_id": "seed_airline_passenger_dob_v1",
+    "status": "verified",
+    "support_count": 2,
+    "evidence_ids": [
+      "seed:book_reservation_dob_schema"
+    ],
+    "domain": "airline",
+    "metadata": {
+      "seed": true,
+      "source": "manual_seed_v1",
+      "ablation": "passenger_dob_field_name",
+      "skill_credit": {
+        "uses": 2,
+        "successes": 2,
+        "score": 0.75,
+        "events": []
+      },
+      "utility": 0.75,
+      "credit_seeded_from_birth": true
+    }
+  }
+]

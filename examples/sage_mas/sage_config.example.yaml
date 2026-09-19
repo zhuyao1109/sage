@@ -1,0 +1,96 @@
+sage:
+  # Strict default: only verified skills may drive organization edits.
+  allow_provisional_org_edits: false
+  # null keeps each evolution --output directory isolated.
+  skill_bank_path: null
+  redundancy_threshold: 0.90
+
+  distillation:
+    # trajectory_enriched: compression + distribution stats (+ LLM summary when backend is available)
+    # heuristic: enriched pipeline without LLM rewrite
+    # trajectory_grounded_llm: alias of trajectory_enriched with backend required
+    # heuristic_seed_only: legacy seed templates only
+    # Keep extraction strict even when verification is disabled.
+    mode: trajectory_enriched
+    high_cost_steps: 25
+    min_support: 3
+    operation_min_support: 2
+    min_family_support: 2
+    max_evidence_trajectories: 3
+    max_steps_per_trajectory: 15
+    max_fragments: 5
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.7
+
+  # Teacher drafts are raw material. Enable student-aware adapt / contrastive
+  # patches, and require student MU (inject_ready) before org edits.
+  skill_transfer:
+    student_aware_adapt: false
+    contrastive_patches: false
+    revise_on_mu_failure: false
+    max_protocol_steps: 8
+    max_patches_per_family: 3
+    require_inject_ready_for_org: true
+    require_positive_mu_for_injection: true
+    min_executable_coverage_for_add_agent: 0.5
+
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 3
+    allow_bootstrap_add: true
+    max_bootstrap_agents_per_round: 1
+    cluster_by: family_signal
+    require_executable_bank_for_add_agent: true
+    min_executable_coverage_for_add_agent: 0.5
+    prefer_assign_before_add: true
+    min_new_agent_call_rate: 0.5
+
+  shadow:
+    # Reserve these tasks before collecting evolution trajectories.
+    num_tasks: 2
+    seed: 202
+    temperature: 0.0
+    save_steps: true
+    max_advisors: 1
+    gate_assigned_skills: true
+    cost_weight: 0.1
+    agent_count_weight: 0.02
+    min_relative_gain: 0.02
+    bootstrap_samples: 500
+    confidence_level: 0.95
+    require_confident_gain: false
+    min_paired_tasks: 2
+    min_new_agent_call_rate: 0.5
+
+  loop:
+    # Low-cost pilot settings. Increase these only after validating one cycle.
+    rounds: 1
+    collection_tasks_per_round: 5
+    reporting_pool_size: 0
+    shadow_pool_size: 2
+    max_skills_per_round: 3
+    seed: 303
+    temperature: 0.0
+    save_steps: true
+    max_advisors: 1
+    gate_injected_skills: true
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    stop_when_no_candidates: false
+
+  # Initial fixed MAS. ALFWorld starts with a single executor.
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      responsibilities:
+        - "Interpret ALFWorld observations"
+        - "Select and execute admissible environment actions"
+      assigned_skills: []
+      tool_permissions:
+        - "alfworld_action"
+      activation_condition: "Always active during environment interaction."
+      # Leave unset for OpenAI-compatible proxies that reject token-limit fields.
+      token_budget: null

@@ -1,0 +1,234 @@
+# SAGE-MAS Enhancement Configuration
+# This file contains all configurable parameters for the enhanced components
+# No hardcoded values - all behavior is controlled through this config
+
+enhancement:
+  # ============================================================================
+  # Skill Context Enricher Configuration
+  # ============================================================================
+  skill_context:
+    # Enable/disable enriched skill context in prompts
+    enabled: true
+
+    # Maximum number of steps to show as lookahead
+    max_lookahead: 3
+
+    # Include rationale/goal explanations
+    include_rationale: true
+
+    # Loop detection threshold (how many repeats before warning)
+    loop_threshold: 2
+
+    # State hint patterns - defines what to check in observation
+    state_hint_patterns:
+      navigation:
+        keywords: ["go to"]
+        hint_default: "Verify the location exists and is reachable"
+
+      take_object:
+        keywords: ["take", "from"]
+        conditions:
+          visible: true
+        hint_true: "Confirmed: {target} is visible"
+        hint_false: "Search for {target} in this location"
+
+      cool_operation:
+        keywords: ["cool", "with"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to cool"
+        hint_false: "Must be holding object before cooling"
+
+      heat_operation:
+        keywords: ["heat", "with"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to heat"
+        hint_false: "Must be holding object before heating"
+
+      clean_operation:
+        keywords: ["clean", "with"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to clean"
+        hint_false: "Must be holding object before cleaning"
+
+      place_object:
+        keywords: ["move", "to"]
+        conditions:
+          holding: true
+        hint_true: "You're holding the object; ready to place at destination"
+        hint_false: "Must be holding object to place it"
+
+      open_container:
+        keywords: ["open"]
+        hint_default: "Check if container is currently closed"
+
+      close_container:
+        keywords: ["close"]
+        hint_default: "Check if container is currently open"
+
+    # Warning patterns - failure patterns to warn about
+    warning_patterns:
+      loop_detection:
+        navigation_loop:
+          keywords: ["go to"]
+          warning: "Avoid revisiting same location repeatedly; explore new areas"
+
+        container_loop:
+          keywords: ["open", "close"]
+          warning: "Avoid open/close loops; take or place object before closing"
+
+      operation_warnings:
+        cool_sequence:
+          keywords: ["cool"]
+          warning: "Ensure container is open BEFORE operation; close AFTER"
+
+        heat_sequence:
+          keywords: ["heat"]
+          warning: "Ensure container is open BEFORE operation; close AFTER"
+
+    # Phase categorization for decomposition
+    verb_categories:
+      navigate: ["go", "look", "examine"]
+      acquire: ["take", "pick", "grab", "get"]
+      transform: ["cool", "heat", "clean", "wash"]
+      container: ["open", "close"]
+      place: ["move", "put", "place"]
+      use: ["use", "toggle", "turn"]
+
+    phase_descriptions:
+      navigate: "Navigate to required location"
+      acquire: "Pick up the target object"
+      transform: "Apply required operation to object"
+      container: "Manage container state"
+      place: "Place object at destination"
+      use: "Use the required tool"
+
+  # ============================================================================
+  # Task Decomposition Configuration
+  # ============================================================================
+  task_decomposition:
+    # Enable/disable high-level task decomposition
+    enabled: true
+
+    # Whether to infer decomposition from skills or use predefined templates
+    # Options: "infer_from_skills", "predefined", "both"
+    mode: "infer_from_skills"
+
+  # ============================================================================
+  # Skill Verification Configuration
+  # ============================================================================
+  skill_verification:
+    # Enable multi-tier verification
+    enabled: true
+
+    # Tier 1: Auto-accept thresholds
+    auto_accept:
+      teacher_success_rate: 0.85
+      min_support_count: 3
+      high_support_threshold: 10  # Skills with this many supports need lower SR
+      high_support_sr: 0.75
+
+    # Tier 2: Quick probe parameters
+    quick_probe:
+      enabled: true
+      num_episodes: 5
+      success_rate_threshold: 0.40
+      min_teacher_sr: 0.60
+      max_teacher_sr: 0.85
+
+    # Tier 3: Credit-based tracking
+    credit_based:
+      enabled: true
+      min_wins: 1
+      min_support: 1
+
+    # Structural quality checks
+    structural:
+      require_checks: true
+      min_protocol_steps: 3
+      max_protocol_steps: 20
+      max_instance_ratio: 0.5  # Max ratio of instance literals (e.g., "tomato 1")
+      required_verb_categories: ["navigate", "acquire"]  # At least one verb from these
+
+  # ============================================================================
+  # Meta Agent Dispatcher Configuration
+  # ============================================================================
+  meta_dispatcher:
+    # Enable enhanced meta dispatcher
+    enabled: false  # Requires refactoring call chain
+
+    # LLM-based dispatch (expensive, optional)
+    llm_dispatch:
+      enabled: false
+      fallback_to_semantic: true
+
+    # Operation keywords to extract from skills
+    operation_keywords:
+      - "cool"
+      - "heat"
+      - "clean"
+      - "use"
+
+    # Verb patterns for task parsing (regex)
+    verb_patterns:
+      - "\\b(put|place|move)\\b"
+      - "\\b(cool|heat|clean|wash)\\b"
+      - "\\b(pick|take|get|grab)\\b"
+      - "\\b(use|toggle|turn)\\b"
+      - "\\b(look|examine|find)\\b"
+
+    # Stop words to filter from task keywords
+    stop_words:
+      - "a"
+      - "an"
+      - "the"
+      - "and"
+      - "or"
+      - "but"
+      - "in"
+      - "on"
+      - "at"
+      - "to"
+      - "for"
+      - "of"
+      - "with"
+      - "by"
+      - "from"
+      - "up"
+      - "about"
+      - "into"
+      - "through"
+      - "some"
+
+    # Scoring weights for agent-task matching
+    matching_scores:
+      task_family_match: 10.0
+      operation_match: 5.0
+      keyword_match: 0.5
+      verified_skill_bonus: 0.2
+      success_rate_multiplier: 2.0
+
+    # Dispatch eligibility
+    min_dispatches_for_sr: 3  # Minimum dispatches before using success rate
+
+  # ============================================================================
+  # Runtime Integration Configuration
+  # ============================================================================
+  runtime:
+    # Use EnhancedMASRuntime instead of MASRuntime
+    use_enhanced_runtime: true
+
+    # Which enhancements to enable
+    enable_enriched_context: true
+    enable_task_decomposition: true
+    enable_meta_dispatcher: false
+
+# Example: Override specific patterns for custom domains
+# custom_patterns:
+#   my_domain:
+#     state_hints:
+#       custom_operation:
+#         keywords: ["my_verb", "with"]
+#         hint_default: "Custom hint for my operation"

@@ -1,0 +1,90 @@
+# F4: Executor + frozen S2 bank (creditON+fixed training) + fixed-prefix inject.
+
+sage:
+  allow_provisional_org_edits: false
+  skill_bank_path: null
+  redundancy_threshold: 0.90
+  distillation:
+    mode: heuristic
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 999
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    max_new_agents_per_round: 0
+  shadow:
+    enabled: false
+  seed_skill_bank_path: "logs/sage_mas/ablate_skill_S2_creditON_fixed/skill_bank.json"
+  seed_skill_statuses:
+    - verified
+    - provisional
+  executor_dispatch:
+    enabled: false
+    allow_dormant: true
+    auto_assign_single: false
+  online:
+    num_games: 134
+    collection_dataset: valid_unseen
+    segment_size: 134
+    parallel_envs: 32
+    api_concurrency: 32
+    llm_timeout: 120
+    llm_max_retries: 2
+    game_selection: first
+    seed: 1
+    temperature: 0.0
+    executor_model: gemini-2.5-flash
+    specialist_model: gemini-2.5-flash
+    acceptor_model: gemini-2.5-flash
+    max_skills_per_round: 0
+    skip_shadow: true
+    freeze_organization: true
+    commit_org_on_last_segment: false
+    distill_after_last_segment: false
+    stop_when_no_candidates: true
+    save_steps: true
+    use_visited_location_memory: false
+    max_advisors: 0
+    executor_only: false
+    ignore_assigned_skills: true
+    max_injected_skills: 2
+    gate_injected_skills: false
+    gate_assigned_skills: true
+    val_eval:
+      enabled: false
+    test_eval:
+      enabled: false
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      role_specification: "Sole ALFWorld actor with optional injected skill protocols."
+      responsibility_boundary: "In scope: observation interpretation, skill-conditioned action selection."
+      responsibilities:
+        - "Interpret ALFWorld observations"
+        - "Select and execute admissible environment actions"
+        - "Follow injected skill protocols when available"
+      assigned_skills: []
+      tool_permissions:
+        - "alfworld_action"
+      activation_condition: "Always active during environment interaction."
+      input_protocol: "Input: ALFWorld observation template; optional active skill protocols."
+      output_protocol: "Output exactly one <think>...</think><action>admissible action</action> decision."
+      communication_edges: []
+      token_budget: null
+      turn_budget: null
+      retirement_condition: null
+      shadow_evaluation_record:
+        status: "baseline"
+
+  enable_action_guards: false
+  compact_alfworld_prompts: false

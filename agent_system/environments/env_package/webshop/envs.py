@@ -172,9 +172,25 @@ class WebshopMultiProcessEnv(gym.Env):
 
         return obs_list, reward_list, done_list, info_list
 
-    def reset(self):
-        idx = self._rng.choice(self.goal_idxs, size=self.env_num, replace=False)
-        idx = np.repeat(idx, self.group_n).tolist()
+    def reset(self, goal_indices: list[int] | None = None):
+        """Reset workers.
+
+        Args:
+            goal_indices: Optional explicit goal ids (length must equal
+                ``num_processes``). When set, sampling is disabled so SAGE
+                causal A/B runs can pin the same 500-test stream.
+        """
+        if goal_indices is not None:
+            idx = [int(i) for i in goal_indices]
+            if len(idx) != self.num_processes:
+                raise ValueError(
+                    f"Expected {self.num_processes} goal_indices, got {len(idx)}"
+                )
+        else:
+            idx = self._rng.choice(
+                self.goal_idxs, size=self.env_num, replace=False
+            )
+            idx = np.repeat(idx, self.group_n).tolist()
 
         # Send reset commands to all workers
         futures = []
@@ -185,7 +201,9 @@ class WebshopMultiProcessEnv(gym.Env):
         # Collect results
         results = ray.get(futures)
         obs_list, info_list = [], []
-        for obs, info in results:
+        for (obs, info), goal_idx in zip(results, idx):
+            info = dict(info or {})
+            info.setdefault("goal_idx", int(goal_idx))
             obs_list.append(obs)
             info_list.append(info)
 

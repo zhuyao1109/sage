@@ -1,0 +1,136 @@
+# Test InspectWithLightSpecialist: seed a specialist and dispatch it on
+# look_at_obj_in_light tasks. No evolution, no distillation, no shadow.
+# Goal: see if the specialist can complete its assigned family.
+
+sage:
+  allow_provisional_org_edits: false
+  seed_organization_path: logs/sage_mas/test_inspect_specialist/seed_organization.json
+  seed_skill_bank_path: logs/sage_mas/online_grow_v2/skill_bank.json
+  seed_skill_statuses:
+    - verified
+    - provisional
+  redundancy_threshold: 0.90
+  disable_merge: true
+
+  distillation:
+    mode: heuristic
+    llm_protocol_overlay: false
+    model: gemini-2.5-flash
+    temperature: 0.0
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+    min_wins_for_protocol: 3
+    exclude_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    exclude_signals:
+      - efficient_execution
+      - progress_checkpoint
+      - failure_checkpoint
+      - admissible_action_guard
+      - stagnation_recovery
+      - repetition_guard
+      - search_exhaustion
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+
+  clustering:
+    enabled: false
+
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+    min_uses_for_promotion: 1
+    min_uses_for_pruning: 3
+    require_positive_mu_for_verify: false
+    min_marginal_utility: 0.0
+    min_protocol_coverage: 0.5
+    min_adherence_for_use: 0.34
+    min_adherence_for_verify: 0.34
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 1
+    min_assignment_gap: 0.1
+    allow_bootstrap_add: false
+    max_new_agents_per_round: 0
+    cluster_by: capability
+    dispatch_only_new_agents: true
+    probation_games: 3
+    require_executable_protocol: false
+    require_trajectory_executable_protocol: false
+    require_positive_mu_for_add_agent: false
+
+  executor_dispatch:
+    enabled: true
+    allow_dormant: false
+    auto_assign_single: true
+    require_accepted_for_primary: false
+    prefer_matching_specialist: true
+    probation_primary_quota: 20
+
+  shadow:
+    enabled: false
+
+  online:
+    num_games: 20
+    collection_dataset: train
+    segment_size: 20
+    parallel_envs: 8
+    api_concurrency: 8
+    llm_timeout: 120
+    llm_max_retries: 2
+    game_selection: shuffle
+    seed: 42
+    temperature: 0.0
+    executor_model: gemini-2.5-flash
+    specialist_model: gemini-2.5-flash
+    acceptor_model: gemini-2.5-flash
+    max_skills_per_round: 0
+    skip_shadow: true
+    freeze_organization: true
+    commit_org_on_last_segment: false
+    propose_org_for_unassigned_skills: false
+    org_warmup_segments: 0
+    actor_promotion_probe: false
+    ignore_assigned_skills: false
+    max_advisors: 0
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: false
+    stop_when_no_candidates: true
+    gate_injected_skills: true
+    gate_assigned_skills: false
+    use_visited_location_memory: false
+    require_positive_mu_for_injection: false
+    min_marginal_utility: 0.0
+    paired_mu_probe: false
+    run_control_eval_for_credit: false
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+    val_eval:
+      enabled: false
+    test_eval:
+      enabled: false

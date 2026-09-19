@@ -134,6 +134,13 @@ class AlfredTWEnv(object):
 
         self.game_files = []
 
+        game_files_list = self.config['dataset'].get('game_files_list')
+        if game_files_list:
+            self.game_files = list(game_files_list)
+            self.num_games = len(self.game_files)
+            print(f"Using predefined game list with {self.num_games} games in split={self.train_eval}")
+            return
+
         if self.train_eval == "train":
             data_path = os.path.expandvars(self.config['dataset']['data_path'])
         elif self.train_eval == "eval_in_distribution":
@@ -270,11 +277,16 @@ class AlfredTWEnv(object):
         else:
             raise NotImplementedError
 
-        env_id = textworld.gym.register_games(self.game_files, request_infos,
-                                              batch_size=batch_size,
-                                              asynchronous=True,
-                                              max_episode_steps=max_nb_steps_per_episode,
-                                              wrappers=wrappers)
+        # batch_size=1 under Ray: async TextWorld uses multiprocessing and can
+        # deadlock inside multi-threaded workers. Keep async only for batches.
+        env_id = textworld.gym.register_games(
+            self.game_files,
+            request_infos,
+            batch_size=batch_size,
+            asynchronous=batch_size > 1,
+            max_episode_steps=max_nb_steps_per_episode,
+            wrappers=wrappers,
+        )
         # Launch Gym environment.
         env = textworld.gym.make(env_id)
         return env

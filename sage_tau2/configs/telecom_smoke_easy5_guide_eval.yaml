@@ -1,0 +1,34 @@
+# Easy 5-task smoke: PERSONA:None, ≤2 bugs each (fixed task_ids).
+# Domain telecom-workflow (NL device actions) + empty bank / freeze org.
+
+domain: telecom-workflow
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+task_split_name: train
+allow_task_resampling: false
+segment_size: 5
+num_segments: 1
+seed: 42
+max_concurrency: 2
+seed_skills: false
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+inject_same_domain_only: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 8
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+agent_name: sage_tau2
+dump_pro_trajectories: true
+val_size: 0
+
+task_ids:
+  - "[service_issue]airplane_mode_on|unseat_sim_card[PERSONA:None]"
+  - "[mobile_data_issue]airplane_mode_on|data_mode_off[PERSONA:None]"
+  - "[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]"
+  - "[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]"
+  - "[mms_issue]bad_network_preference|user_abroad_roaming_disabled_off[PERSONA:None]"

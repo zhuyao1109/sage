@@ -1,0 +1,95 @@
+# Executor-only baseline on frozen val140 (valid_seen, 134 games, 1 segment).
+# Match continue_from_noseed95_val140 eval settings for fair comparison:
+#   seed=1, game_selection=first, gemini-2.5-flash, temp=0.0, parallel=32.
+# No skill bank, no specialist dispatch, no skill injection.
+
+sage:
+  allow_provisional_org_edits: false
+  skill_bank_path: null
+  redundancy_threshold: 0.90
+
+  distillation:
+    mode: heuristic
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 999
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    max_new_agents_per_round: 0
+
+  executor_dispatch:
+    enabled: false
+    allow_dormant: true
+    auto_assign_single: false
+
+  shadow:
+    enabled: false
+
+  online:
+    num_games: 140
+    collection_dataset: valid_seen
+    segment_size: 140
+    parallel_envs: 8
+    api_concurrency: 8
+    llm_timeout: 240
+    llm_max_retries: 3
+    game_selection: first
+    seed: 1
+    temperature: 0.0
+    executor_model: gemini-2.5-flash
+    specialist_model: gemini-2.5-flash
+    acceptor_model: gemini-2.5-flash
+    max_skills_per_round: 0
+    skip_shadow: true
+    freeze_organization: true
+    executor_only: true
+    ignore_assigned_skills: true
+    max_advisors: 0
+    max_injected_skills: 0
+    save_steps: true
+    distill_after_last_segment: false
+    stop_when_no_candidates: true
+    gate_injected_skills: true
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    val_eval:
+      enabled: false
+    test_eval:
+      enabled: false
+
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      role_specification: "Sole ALFWorld actor. Interpret observations and execute admissible environment actions directly."
+      responsibility_boundary: "In scope: observation interpretation and action selection. Out of scope: delegating to other agents."
+      responsibilities:
+        - "Interpret ALFWorld observations"
+        - "Select and execute admissible environment actions"
+      assigned_skills: []
+      tool_permissions:
+        - "alfworld_action"
+      activation_condition: "Always active during environment interaction."
+      input_protocol: "Input: ALFWorld observation template."
+      output_protocol: "Output exactly one <think>...</think><action>admissible action</action> decision."
+      communication_edges: []
+      token_budget: null
+      turn_budget: null
+      retirement_condition: null
+      shadow_evaluation_record:
+        status: "baseline"
+
+  enable_action_guards: false
+  compact_alfworld_prompts: false

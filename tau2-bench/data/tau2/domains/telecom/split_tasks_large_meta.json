@@ -1,0 +1,20 @@
+{
+  "domain": "telecom",
+  "recipe": {
+    "source": "full",
+    "test": "official split_tasks.json test (unchanged)",
+    "val_large": "random sample of size 100 from (full - test), seed=42",
+    "train_large": "(full - test - val_large)"
+  },
+  "seed": 42,
+  "sizes": {
+    "full": 2285,
+    "test": 40,
+    "val_large": 100,
+    "train_large": 2145,
+    "train_official": 74,
+    "base_official": 114
+  },
+  "disjoint": true,
+  "union_equals_full": true
+}

@@ -1,0 +1,69 @@
+# Verdict-feedback probe: 1 segment × 20 tasks on train_large.
+# Tests whether retry_verdict_feedback can rescue refuel_data wrong-line fails.
+#
+# cd ~/verl-agent/tau2-bench
+# PYTHONPATH=.. uv run python -m sage_tau2.runners.online_tau2 \
+#   --config ../sage_tau2/configs/telecom_verdict_probe.yaml \
+#   --output ../logs/sage_tau2/telecom_verdict_probe \
+#   --llm-config ../examples/prompt_agent/llm_config.yaml
+
+domain: telecom
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+
+task_split_name: train_large
+allow_task_resampling: false
+balance_difficulty: true
+segment_size: 20
+num_segments: 1
+seed: 42
+max_concurrency: 8
+
+val_size: 0
+
+seed_skills: ../sage_tau2/seed_banks/telecom_bootstrap_seed.json
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: false
+inject_same_domain_only: true
+
+retry_write_fails: true
+retry_k: 1
+retry_verdict_feedback: true
+
+min_support: 2
+require_success: true
+min_protocol_len: 2
+max_new_skills: 12
+verify_score: 0.5
+prune_score: 0.2
+min_protocol_coverage: 0.75
+min_support_for_verified: 3
+credit_require_full_write_spine: true
+credit_per_episode_inject: true
+
+cluster_novelty_threshold: 0.35
+nominate_min_cluster_support: 2
+nominate_min_utility: 0.4
+max_new_agents_per_round: 1
+dispatch_only_new_agents: true
+probation_games: 3
+allow_provisional_org_edits: false
+require_same_domain_for_nominate: true
+no_spec_mode: editor_commit
+
+enable_spec_vs_exec: true
+admit_num_tasks: 6
+admit_min_advantage: 0.05
+admit_accept_ties: false
+admit_on_fail_action: remove
+admit_min_utility: 0.45
+admit_min_support: 2
+
+probation_min_games: 2
+probation_min_wins: 1
+remove_after_rejected_windows: 2
+probation_primary_quota: 0
+
+dump_pro_trajectories: true
+agent_name: sage_tau2

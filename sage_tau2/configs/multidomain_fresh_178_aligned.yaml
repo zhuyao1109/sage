@@ -1,0 +1,69 @@
+# Cold-start multi-domain evolve (178 train, 34×6) — sage_mas-aligned quality gates.
+#
+# Diff vs multidomain_fresh_178_relaxed.yaml:
+#   - no provisional org edits; Spec-vs-Exec ON (paired admit probe)
+#   - higher min_support / novelty / nominate utility
+#   - probation_primary_quota=0 (only Spec-passed / accepted take primary)
+#   - allow_provisional_inject=true so Executor can keep improving credit online
+#     (birth-support seeding still verifies distill skills without inject)
+#
+# Reason: relaxed gates grew 45 noisy skills + 14 weak specialists that hurt
+# OOD test. Aligned gates trade quantity for credit-verified, Spec-passed carriers.
+
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+seed: 42
+max_concurrency: 6
+max_inject_skills: 2
+# Needed for ongoing credit after birth verify; org nominate still verified-only.
+allow_provisional_inject: true
+freeze_organization: false
+inject_same_domain_only: true
+
+segment_size: 34
+num_segments: 6
+task_split_name: train
+allow_task_resampling: false
+domain_weights:
+  airline: 30
+  retail: 74
+  telecom: 74
+
+# Distill: require repeated success before skill birth
+min_support: 2
+require_success: true
+min_protocol_len: 2
+max_new_skills: 12
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.50
+
+# Cluster: default Jaccard novelty (was 0.05 → variant explosion)
+cluster_novelty_threshold: 0.35
+nominate_min_cluster_support: 2
+nominate_min_utility: 0.50
+max_new_agents_per_round: 1
+dispatch_only_new_agents: true
+probation_games: 3
+allow_provisional_org_edits: false
+require_same_domain_for_nominate: true
+no_spec_mode: editor_commit
+
+# Spec-vs-Exec: specialist must beat Executor on probe tasks before ADD
+enable_spec_vs_exec: true
+admit_num_tasks: 6
+admit_min_advantage: 0.0
+admit_accept_ties: false
+admit_on_fail_action: remove
+admit_min_utility: 0.60
+admit_min_support: 2
+
+probation_min_games: 3
+probation_min_wins: 2
+remove_after_rejected_windows: 2
+
+# Evolve: probation without Spec probe cannot take sticky primary.
+# Spec-passed sets promotion_probe_passed=True → still dispatchable.
+probation_primary_quota: 0
+
+agent_name: sage_tau2

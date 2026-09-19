@@ -1,0 +1,59 @@
+# Cold-start multi-domain evolve: full official train (178 unique, no resampling).
+# segment_size=34 → per-seg quotas airline:retail:telecom = 6:14:14.
+# Coverage: 5 full segments (170 tasks) + 1 partial segment (8) = 178.
+#
+# Gates aligned with sage_mas online600 (strict). For small-train bootstrap only,
+# see multidomain_fresh_178_relaxed.yaml; for quality evolve prefer
+# multidomain_fresh_178_aligned.yaml (Spec-vs-Exec + probation_primary_quota=0).
+
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+seed: 42
+max_concurrency: 6
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: false
+inject_same_domain_only: true
+
+segment_size: 34
+num_segments: 6
+task_split_name: train
+allow_task_resampling: false
+domain_weights:
+  airline: 30
+  retail: 74
+  telecom: 74
+
+min_support: 2
+require_success: true
+min_protocol_len: 2
+max_new_skills: 12
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+
+cluster_novelty_threshold: 0.35
+nominate_min_cluster_support: 2
+nominate_min_utility: 0.50
+max_new_agents_per_round: 1
+dispatch_only_new_agents: true
+probation_games: 3
+allow_provisional_org_edits: false
+require_same_domain_for_nominate: true
+no_spec_mode: editor_commit
+
+enable_spec_vs_exec: false
+admit_num_tasks: 8
+admit_min_advantage: 0.0
+admit_accept_ties: false
+admit_on_fail_action: remove
+admit_min_utility: 0.60
+admit_min_support: 3
+
+probation_min_games: 3
+probation_min_wins: 2
+remove_after_rejected_windows: 2
+# Spec off → need a small probation quota so onboarding can observe primary trials.
+probation_primary_quota: 3
+
+agent_name: sage_tau2

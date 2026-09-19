@@ -1,0 +1,57 @@
+# Telecom-workflow: 30 tasks/seg × 10 segs on train_large; fixed val after each seg.
+# train_large=2145 (excludes official test + val_large); val_large=100 held-out.
+# Official train(74) is too small for 30×10 without resampling.
+
+domain: telecom
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+
+task_split_name: train_large
+allow_task_resampling: false
+segment_size: 30
+num_segments: 10
+seed: 42
+max_concurrency: 6
+
+val_size: 100
+val_split_name: val_large
+val_exclude_from_train: true
+dump_val_pro_trajectories: true
+
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: false
+inject_same_domain_only: true
+
+min_support: 2
+require_success: true
+min_protocol_len: 2
+max_new_skills: 12
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.75
+
+cluster_novelty_threshold: 0.35
+nominate_min_cluster_support: 2
+nominate_min_utility: 0.50
+max_new_agents_per_round: 1
+dispatch_only_new_agents: true
+probation_games: 3
+allow_provisional_org_edits: false
+require_same_domain_for_nominate: true
+no_spec_mode: editor_commit
+
+enable_spec_vs_exec: true
+admit_num_tasks: 6
+admit_min_advantage: 0.0
+admit_accept_ties: false
+admit_on_fail_action: remove
+admit_min_utility: 0.60
+admit_min_support: 2
+
+probation_min_games: 3
+probation_min_wins: 2
+remove_after_rejected_windows: 2
+probation_primary_quota: 0
+
+agent_name: sage_tau2

@@ -1,0 +1,145 @@
+# Online segmented SAGE on all ALFWorld valid_unseen games:
+#   all 134 valid_unseen games count toward the online score;
+#   valid_seen games are reserved for discovery and organization shadow.
+#   segment collect/eval → grounded Skill credit → SkillBank update
+#   → capability-stratified organization shadow → next segment.
+#
+# Example (foreground; Ctrl+C to stop; resumes via online_state.json):
+#   env -u OPENAI_API_KEY python -m sage_mas.runners.online_alfworld \
+#     --llm-config examples/prompt_agent/llm_config.yaml \
+#     --sage-config examples/sage_mas/sage_config.online134.yaml \
+#     --output logs/sage_mas/online134_run1
+
+sage:
+  allow_provisional_org_edits: false
+  skill_bank_path: null
+  redundancy_threshold: 0.90
+
+  distillation:
+    # One positive trajectory is enough for provisional online evaluation.
+    mode: heuristic
+    high_cost_steps: 25
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+    max_evidence_trajectories: 3
+    max_steps_per_trajectory: 15
+    max_fragments: 5
+
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+    min_uses_for_promotion: 1
+    min_uses_for_pruning: 3
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+
+  organization:
+    # Credit promotion only admits a Skill into org decisions. ADD_AGENT still
+    # requires independent nearest-skill cosine novelty above this threshold,
+    # plus assignment gap against the current roster.
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 1
+    min_failure_rate: 0.0
+    min_assignment_gap: 0.1
+    allow_bootstrap_add: true
+    max_bootstrap_agents_per_round: 1
+    cluster_by: capability
+    # Specialists start dispatch-only probation and never auto-steal stages.
+    dispatch_only_new_agents: true
+    probation_games: 3
+
+  executor_dispatch:
+    # Executor compares the new task with every learned CapabilityContract,
+    # including itself as fallback, then assigns one sticky episode owner.
+    enabled: true
+    allow_dormant: true
+    auto_assign_single: false
+
+  shadow:
+    # Temporarily disabled for the 134-task online credit run.
+    enabled: false
+    num_tasks: 2
+    seed: 202
+    temperature: 0.0
+    save_steps: true
+    max_advisors: 1
+    gate_assigned_skills: true
+    cost_weight: 0.0
+    agent_count_weight: 0.0
+    min_relative_gain: 0.0
+    bootstrap_samples: 500
+    confidence_level: 0.95
+    require_confident_gain: false
+    min_paired_tasks: 1
+
+  online:
+    num_games: 134
+    # Update Skill credit and organization after every 10 tasks.
+    segment_size: 10
+    parallel_envs: 16
+    api_concurrency: 16
+    game_selection: shuffle
+    seed: 1
+    temperature: 0.4
+    max_skills_per_round: 3
+    mechanism_dataset: valid_seen
+    shadow_pool_size: 0
+    skip_shadow: true
+    commit_org_on_last_segment: true
+    max_advisors: 4
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: true
+    stop_when_no_candidates: false
+    gate_injected_skills: true
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    # Accept only after repeated in-contract full-task wins that are not worse
+    # than Executor on the same CapabilityContract scope.
+    probation_min_games: 3
+    probation_min_wins: 2
+    probation_epsilon: 0.0
+    remove_after_rejected_windows: 2
+
+  skill_lifecycle:
+    negative_utility_threshold: 0.0
+    negative_utility_decay: 0.5
+    retire_after_negative: 0
+
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      role_specification: "Team coordinator and fallback ALFWorld actor. At each new task, judge the task family/skills and assign a specialist from the roster when a match exists; otherwise execute admissible actions yourself."
+      responsibility_boundary: "In scope: episode assignment to specialists; final action selection when no specialist is assigned. Out of scope: inventing agents not on the roster; ignoring active skill protocols when preconditions match."
+      responsibilities:
+        - "Judge each new task and assign a matching roster agent"
+        - "Interpret ALFWorld observations"
+        - "Select and execute admissible environment actions when acting"
+      assigned_skills: []
+      tool_permissions:
+        - "go to"
+        - "open"
+        - "close"
+        - "take"
+        - "put"
+        - "clean"
+        - "heat"
+        - "cool"
+        - "use"
+        - "inventory"
+        - "examine"
+        - "look"
+        - "alfworld_action"
+      activation_condition: "Always active during environment interaction."
+      input_protocol: "Input: ALFWorld observation template; optional team advice; optional active skill protocols."
+      output_protocol: "Output exactly one <think>...</think><action>admissible action</action> decision."
+      communication_edges: []
+      token_budget: 512
+      turn_budget: null
+      retirement_condition: null
+      shadow_evaluation_record:
+        status: "baseline"

@@ -1,0 +1,25 @@
+# One-task live smoke for telecom-workflow (manual runner uses --task-id via script).
+# Prefer the copy-paste command in chat; this YAML is for online_tau2 segment_size=1 random sample.
+domain: telecom-workflow
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+task_split_name: train
+allow_task_resampling: false
+segment_size: 1
+num_segments: 1
+seed: 42
+max_concurrency: 1
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+inject_same_domain_only: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 4
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+agent_name: sage_tau2
+dump_pro_trajectories: true
+val_size: 0

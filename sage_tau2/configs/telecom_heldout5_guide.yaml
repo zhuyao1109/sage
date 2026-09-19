@@ -1,0 +1,34 @@
+# Held-out 5: unseen task ids, bug overlap with easy5 guide skills.
+# Uses relaxed bug-gate bank copy (protocol transfer test).
+
+domain: telecom-workflow
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+task_split_name: train
+allow_task_resampling: false
+segment_size: 5
+num_segments: 1
+seed: 7
+max_concurrency: 2
+seed_skills: false
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+inject_same_domain_only: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 8
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+agent_name: sage_tau2
+dump_pro_trajectories: true
+val_size: 0
+
+task_ids:
+  - "[mobile_data_issue]airplane_mode_on|bad_network_preference|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+  - "[service_issue]airplane_mode_on|break_apn_settings|unseat_sim_card[PERSONA:None]"
+  - "[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]"
+  - "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]"
+  - "[mobile_data_issue]bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on[PERSONA:None]"

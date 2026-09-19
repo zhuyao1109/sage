@@ -1,0 +1,465 @@
+[
+  {
+    "skill_name": "enable roaming skill (n=9); airplane_mode_on+bad_wifi_calling+break_app_both_permissions+break_ap…",
+    "description": "Reusable τ² solve_write protocol distilled from successful episodes: get_customer_by_phone(phone_number=<from_user_or_ask>) -> get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>) -> get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>) -> enable_roaming(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+    "precondition": "Triggered when user requests similar goals (examples: Oh, hello there. I'm having a bit of trouble with my phone. I can't seem to send picture messages, you know, MMS messag… | Hi there! My name is John Smith, and my phone number is 555-123-2002. I'm having some trouble with my phone today. For…). Follow the learned protocol and domain policy. Do not call user-device APIs as agent tools.",
+    "action_protocol": [
+      "get_customer_by_phone(phone_number=<from_user_or_ask>)",
+      "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+      "get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+      "enable_roaming(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+      "guide user: toggle_airplane_mode",
+      "guide user: toggle_wifi_calling",
+      "guide user: grant_app_permission",
+      "guide user: reset_apn_settings",
+      "guide user: reboot_device",
+      "guide user: set_network_mode_preference",
+      "guide user: toggle_roaming",
+      "guide user: toggle_data"
+    ],
+    "expected_effect": "Outcome consistent with successful episodes (env_reward_ok=9/9, db_match_ok=0/9; legacy db_ok=0/9, reward_ok=9/9). For telecom, env_reward_ok is the teaching signal; db_match_ok may be 0 even on solved episodes (ENV/user-side fixes). Agent write may be partial; follow inlined user-side branches as well as the write tool. Prefer the grounded agent-tool protocol; do not invent facts.",
+    "capability_key": "tau2.enable_roaming",
+    "skill_id": "seed_telecom_roaming_bootstrap_v1",
+    "status": "verified",
+    "support_count": 9,
+    "evidence_ids": [
+      "[mms_issue]airplane_mode_on|bad_wifi_calling|break_app_both_permissions[PERSONA:Hard]",
+      "[mms_issue]airplane_mode_on|bad_wifi_calling|break_apn_mms_setting[PERSONA:Hard]",
+      "[mms_issue]bad_network_preference|break_app_both_permissions|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+      "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_mode_off[PERSONA:Easy]",
+      "[mms_issue]bad_network_preference|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:None]",
+      "[mms_issue]airplane_mode_on|bad_wifi_calling|break_app_storage_permission|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+      "[mms_issue]bad_wifi_calling|break_app_both_permissions|data_mode_off|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+      "[mms_issue]airplane_mode_on|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|user_abroad_roaming_disabled_off[PERSONA:None]",
+      "seed:bootstrap"
+    ],
+    "domain": "telecom",
+    "metadata": {
+      "source": "bootstrap_distill_v1",
+      "task_ids": [
+        "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_mode_off[PERSONA:Easy]",
+        "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+        "[mms_issue]airplane_mode_on|bad_wifi_calling|break_apn_mms_setting[PERSONA:Hard]",
+        "[mms_issue]airplane_mode_on|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|user_abroad_roaming_disabled_off[PERSONA:None]",
+        "[mms_issue]airplane_mode_on|bad_wifi_calling|break_app_both_permissions[PERSONA:Hard]",
+        "[mms_issue]airplane_mode_on|bad_wifi_calling|break_app_storage_permission|user_abroad_roaming_enabled_off[PERSONA:Hard]",
+        "[mms_issue]bad_network_preference|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:None]",
+        "[mms_issue]bad_network_preference|break_app_both_permissions|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+        "[mms_issue]bad_wifi_calling|break_app_both_permissions|data_mode_off|user_abroad_roaming_enabled_off[PERSONA:Hard]"
+      ],
+      "protocol_len": 12,
+      "task_families": [
+        "enable_roaming",
+        "mms_issue",
+        "mms_issue_abroad"
+      ],
+      "primary_task_family": "mms_issue",
+      "intent_cues": [
+        "airplane",
+        "airplane_mode_on",
+        "bad_network_preference",
+        "bad_wifi_calling",
+        "break_apn_mms_setting",
+        "break_app_both_permissions",
+        "break_app_sms_permission",
+        "break_app_storage_permission",
+        "data_mode_off",
+        "france",
+        "mms",
+        "mobile_data_slow",
+        "roaming",
+        "sim",
+        "user_abroad_roaming_disabled_off",
+        "user_abroad_roaming_enabled_off",
+        "wifi"
+      ],
+      "protocol_bucket": [
+        "solve_write",
+        "tau2.enable_roaming",
+        "get_customer_by_phone",
+        "get_details_by_id",
+        "get_data_usage",
+        "enable_roaming"
+      ],
+      "protocol_bucket_key": [
+        "solve_write",
+        "tau2.enable_roaming",
+        "enable_roaming"
+      ],
+      "protocol_bucket_write_spine": [
+        "solve_write",
+        "tau2.enable_roaming",
+        "enable_roaming"
+      ],
+      "protocol_unbound": [
+        "get_customer_by_phone(phone_number=?)",
+        "get_details_by_id(id=?)",
+        "get_data_usage(customer_id=?, line_id=?)",
+        "enable_roaming(customer_id=?, line_id=?)"
+      ],
+      "agent_tool_protocol": [
+        "get_customer_by_phone(phone_number=<from_user_or_ask>)",
+        "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+        "get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+        "enable_roaming(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)"
+      ],
+      "agent_tool_protocol_purpose": "credit/coverage subset derived from action_protocol",
+      "write_capability_key": "tau2.enable_roaming",
+      "parent_capability_key": "tau2.mms_issue_abroad",
+      "primary_write": "enable_roaming",
+      "sharp_card": false,
+      "bug_signature": [],
+      "dialogue_gates": [],
+      "user_side_hints": [
+        "user-side fix seen in evidence: toggle_airplane_mode",
+        "user-side fix seen in evidence: toggle_wifi_calling",
+        "user-side fix seen in evidence: grant_app_permission",
+        "user-side fix seen in evidence: reset_apn_settings",
+        "user-side fix seen in evidence: reboot_device",
+        "user-side fix seen in evidence: set_network_mode_preference",
+        "user-side fix seen in evidence: toggle_roaming",
+        "user-side fix seen in evidence: toggle_data"
+      ],
+      "guide_user_steps": [
+        "guide user: toggle_airplane_mode",
+        "guide user: toggle_wifi_calling",
+        "guide user: grant_app_permission",
+        "guide user: reset_apn_settings",
+        "guide user: reboot_device",
+        "guide user: set_network_mode_preference",
+        "guide user: toggle_roaming",
+        "guide user: toggle_data"
+      ],
+      "bug_tags_union": [
+        "airplane_mode_on",
+        "bad_wifi_calling",
+        "break_app_both_permissions",
+        "break_apn_mms_setting",
+        "bad_network_preference",
+        "user_abroad_roaming_enabled_off",
+        "break_app_sms_permission",
+        "data_mode_off",
+        "break_app_storage_permission",
+        "user_abroad_roaming_disabled_off"
+      ],
+      "evidence_bug_signatures": [
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_app_both_permissions"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_apn_mms_setting"
+        ],
+        [
+          "bad_network_preference",
+          "break_app_both_permissions",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "break_app_sms_permission",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "break_app_both_permissions",
+          "data_mode_off"
+        ],
+        [
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_app_storage_permission",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "bad_wifi_calling",
+          "break_app_both_permissions",
+          "data_mode_off",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_apn_mms_setting",
+          "break_app_storage_permission",
+          "data_mode_off",
+          "user_abroad_roaming_disabled_off"
+        ]
+      ],
+      "bug_bucket_mode": "union_with_signature_gate",
+      "activation_signatures": [
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_app_both_permissions"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_apn_mms_setting"
+        ],
+        [
+          "bad_network_preference",
+          "break_app_both_permissions",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "break_app_sms_permission",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "break_app_both_permissions",
+          "data_mode_off"
+        ],
+        [
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_app_storage_permission",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "bad_wifi_calling",
+          "break_app_both_permissions",
+          "data_mode_off",
+          "user_abroad_roaming_enabled_off"
+        ],
+        [
+          "airplane_mode_on",
+          "bad_wifi_calling",
+          "break_apn_mms_setting",
+          "break_app_storage_permission",
+          "data_mode_off",
+          "user_abroad_roaming_disabled_off"
+        ]
+      ],
+      "bug_intersection": [],
+      "bug_union": [
+        "airplane_mode_on",
+        "bad_network_preference",
+        "bad_wifi_calling",
+        "break_apn_mms_setting",
+        "break_app_both_permissions",
+        "break_app_sms_permission",
+        "break_app_storage_permission",
+        "data_mode_off",
+        "user_abroad_roaming_disabled_off",
+        "user_abroad_roaming_enabled_off"
+      ],
+      "success_attribution": {
+        "env_reward_ok": 9,
+        "db_match_ok": 0,
+        "n": 9,
+        "env_user_side_primary": true,
+        "user_fix_tags": [
+          "airplane_mode_on",
+          "bad_network_preference",
+          "bad_wifi_calling",
+          "break_apn_mms_setting",
+          "break_app_both_permissions",
+          "break_app_sms_permission",
+          "break_app_storage_permission",
+          "data_mode_off",
+          "user_abroad_roaming_disabled_off",
+          "user_abroad_roaming_enabled_off"
+        ],
+        "user_fix_tools": [
+          "grant_app_permission",
+          "reboot_device",
+          "reset_apn_settings",
+          "set_network_mode_preference",
+          "toggle_airplane_mode",
+          "toggle_data",
+          "toggle_roaming",
+          "toggle_wifi_calling"
+        ],
+        "agent_write_role": "secondary_or_partial"
+      },
+      "success_mode": "solve_write",
+      "success_modes": [
+        "solve_write"
+      ],
+      "inline_dialogue_in_protocol": false,
+      "support_tier": "strong",
+      "min_support_for_verified": 3,
+      "precondition_legacy": "Triggered when user requests similar goals (examples: Oh, hello there. I'm having a bit of trouble with my phone. I can't seem to send picture messages, you know, MMS messages. It's been like this for a few hours n | [tool_call] check_network_mode_preference({}) | Oh, hello there. I'm having a bit of trouble with my phone. I can't seem to send picture messages, you know, MMS messages. It's been like this for a few hours n | [tool_call] check_network_mode_preference({}) | Hi there! My name is John Smith, and my phone number is 555-123-2002. I'm having some trouble with my phone today. For the past few hours, I haven't been able t | [tool_call] check_network_status({})). Follow domain policy and grounded tools.",
+      "expected_effect_legacy": "Local DB / communicate outcome consistent with successful episodes (db_ok=0/9, reward_ok=9/9). Prefer matching the grounded tool protocol; do not invent facts.",
+      "intent_cues_legacy": [
+        "airplane",
+        "mms",
+        "roaming",
+        "sim",
+        "wifi"
+      ],
+      "seed": true,
+      "bootstrap_origin": "logs/sage_tau2/telecom_seg20_x5_coarse/skill_bank.json"
+    }
+  },
+  {
+    "skill_name": "enumerate_lines_then_refuel_data",
+    "description": "Reusable τ² solve_write protocol distilled from successful episodes: get_customer_by_phone(phone_number=<from_user_or_ask>) -> get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>) -> get_customer_by_phone(phone_number=<from_user_or_ask>) -> get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>) -> get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>) -> get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>) -> get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>) -> enable_roaming(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>) -> enable_roaming(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>) -> refuel_data(customer_id=<customer_id from lookup>, gb_amount=2, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+    "precondition": "Triggered when user requests similar goals (examples: Hi there! I'm John Smith, and my phone number is 555-123-2002. I'm calling because I'm having trouble sending MMS messa…). Follow the learned protocol and domain policy. Do not call user-device APIs as agent tools.",
+    "action_protocol": [
+      "get_customer_by_phone(phone_number=<from_user_or_ask>)",
+      "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+      "get_customer_by_phone(phone_number=<from_user_or_ask>)",
+      "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+      "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+      "get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+      "get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+      "refuel_data(customer_id=<customer_id from lookup>, gb_amount=2, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+      "guide user: grant_app_permission",
+      "guide user: toggle_roaming"
+    ],
+    "expected_effect": "Outcome consistent with successful episodes (env_reward_ok=1/1, db_match_ok=0/1; legacy db_ok=0/1, reward_ok=1/1). For telecom, env_reward_ok is the teaching signal; db_match_ok may be 0 even on solved episodes (ENV/user-side fixes). Agent write may be partial; follow inlined user-side branches as well as the write tool. Prefer the grounded agent-tool protocol; do not invent facts.",
+    "capability_key": "tau2.refuel_data",
+    "skill_id": "seed_telecom_refuel_bootstrap_v1",
+    "status": "verified",
+    "support_count": 2,
+    "evidence_ids": [
+      "[mms_issue]break_app_storage_permission|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "seed:bootstrap"
+    ],
+    "domain": "telecom",
+    "metadata": {
+      "source": "bootstrap_distill_v1",
+      "task_ids": [
+        "[mms_issue]break_app_storage_permission|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+      ],
+      "protocol_len": 12,
+      "task_families": [
+        "refuel_data",
+        "mms_issue",
+        "mms_issue_abroad"
+      ],
+      "primary_task_family": "refuel_data",
+      "intent_cues": [
+        "break_app_storage_permission",
+        "data_usage_exceeded",
+        "france",
+        "mms"
+      ],
+      "protocol_unbound": [
+        "get_customer_by_phone(phone_number=?)",
+        "get_details_by_id(id=?)",
+        "enable_roaming(customer_id=?, line_id=?)",
+        "get_customer_by_phone(phone_number=?)",
+        "get_details_by_id(id=?)",
+        "get_data_usage(customer_id=?, line_id=?)",
+        "get_details_by_id(id=?)",
+        "get_data_usage(customer_id=?, line_id=?)",
+        "enable_roaming(customer_id=?, line_id=?)",
+        "refuel_data(customer_id=?, gb_amount=?, line_id=?)"
+      ],
+      "agent_tool_protocol": [
+        "get_customer_by_phone(phone_number=<from_user_or_ask>)",
+        "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+        "get_customer_by_phone(phone_number=<from_user_or_ask>)",
+        "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+        "get_details_by_id(id=<customer_id_from_prior_lookup;do_not_pass_guessed_line_id>)",
+        "get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+        "get_data_usage(customer_id=<customer_id from lookup>, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)",
+        "refuel_data(customer_id=<customer_id from lookup>, gb_amount=2, line_id=<target_line_id_after_enumerating_all_lines_via_get_data_usage;never_default_first_listed_line>)"
+      ],
+      "agent_tool_protocol_purpose": "credit/coverage subset derived from action_protocol",
+      "write_capability_key": "tau2.refuel_data",
+      "parent_capability_key": "tau2.refuel_data",
+      "primary_write": "refuel_data",
+      "sharp_card": false,
+      "bug_signature": [],
+      "dialogue_gates": [],
+      "user_side_hints": [
+        "user-side fix seen in evidence: grant_app_permission",
+        "user-side fix seen in evidence: toggle_roaming"
+      ],
+      "guide_user_steps": [
+        "guide user: grant_app_permission",
+        "guide user: toggle_roaming"
+      ],
+      "bug_tags_union": [
+        "break_app_storage_permission",
+        "data_usage_exceeded",
+        "user_abroad_roaming_enabled_off"
+      ],
+      "evidence_bug_signatures": [
+        [
+          "break_app_storage_permission",
+          "data_usage_exceeded",
+          "user_abroad_roaming_enabled_off"
+        ]
+      ],
+      "bug_bucket_mode": "union_with_signature_gate",
+      "activation_signatures": [
+        [
+          "break_app_storage_permission",
+          "data_usage_exceeded",
+          "user_abroad_roaming_enabled_off"
+        ]
+      ],
+      "bug_intersection": [
+        "break_app_storage_permission",
+        "data_usage_exceeded",
+        "user_abroad_roaming_enabled_off"
+      ],
+      "bug_union": [
+        "break_app_storage_permission",
+        "data_usage_exceeded",
+        "user_abroad_roaming_enabled_off"
+      ],
+      "success_attribution": {
+        "env_reward_ok": 1,
+        "db_match_ok": 0,
+        "n": 1,
+        "env_user_side_primary": true,
+        "user_fix_tags": [
+          "break_app_storage_permission",
+          "data_usage_exceeded",
+          "user_abroad_roaming_enabled_off"
+        ],
+        "user_fix_tools": [
+          "grant_app_permission",
+          "toggle_roaming"
+        ],
+        "agent_write_role": "secondary_or_partial"
+      },
+      "success_mode": "solve_write",
+      "success_modes": [
+        "solve_write"
+      ],
+      "inline_dialogue_in_protocol": false,
+      "support_tier": "low",
+      "min_support_for_verified": 3,
+      "precondition_legacy": "Triggered when user requests similar goals (examples: Hi there! I'm John Smith, and my phone number is 555-123-2002. I'm calling because I'm having trouble sending MMS messages. For the past few hours, I haven't be | [tool_call] toggle_roaming({})). Follow domain policy and grounded tools.",
+      "expected_effect_legacy": "Local DB / communicate outcome consistent with successful episodes (db_ok=0/1, reward_ok=1/1). Prefer matching the grounded tool protocol; do not invent facts.",
+      "intent_cues_legacy": [
+        "mms",
+        "roaming"
+      ],
+      "seed": true,
+      "bootstrap_origin": "logs/sage_tau2/telecom_refuel_probe_bank2/skill_bank.json"
+    }
+  }
+]

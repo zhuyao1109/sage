@@ -1,0 +1,51 @@
+# Eval: 22 noskill failures. Pair with offline_distill_causal_v2_failpool_bank
+# (action_checks-complete distill + guide user: make_payment; bug gates off).
+
+domain: telecom-workflow
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+task_split_name: train
+allow_task_resampling: false
+segment_size: 22
+num_segments: 1
+seed: 20260315
+max_concurrency: 2
+seed_skills: false
+# Completeness v2: two write-diverse cards (refuel + roam) when both hinted.
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+inject_same_domain_only: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 8
+verify_score: 0.6
+prune_score: 0.2
+min_protocol_coverage: 0.5
+agent_name: sage_tau2
+dump_pro_trajectories: true
+val_size: 0
+task_ids:
+- '[mobile_data_issue]data_mode_off|data_usage_exceeded[PERSONA:None]'
+- '[mobile_data_issue]data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]'
+- '[mobile_data_issue]data_saver_mode_on|data_usage_exceeded[PERSONA:Easy]'
+- '[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_enabled_off[PERSONA:Easy]'
+- '[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]'
+- '[mobile_data_issue]bad_network_preference|bad_vpn|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]'
+- '[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]'
+- '[mobile_data_issue]bad_network_preference|bad_vpn|user_abroad_roaming_disabled_on[PERSONA:None]'
+- '[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_saver_mode_on|user_abroad_roaming_disabled_on[PERSONA:Easy]'
+- '[mobile_data_issue]airplane_mode_on|bad_network_preference|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]'
+- '[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]'
+- '[mobile_data_issue]airplane_mode_on|bad_network_preference|bad_vpn|data_mode_off|data_saver_mode_on|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:None]'
+- '[service_issue]airplane_mode_on|overdue_bill_suspension|unseat_sim_card[PERSONA:Easy]'
+- '[service_issue]break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:Hard]'
+- '[mms_issue]bad_network_preference|user_abroad_roaming_disabled_off[PERSONA:None]'
+- '[service_issue]airplane_mode_on|break_apn_settings|overdue_bill_suspension|unseat_sim_card[PERSONA:None]'
+- '[mms_issue]break_app_storage_permission|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]'
+- '[mms_issue]break_apn_mms_setting|data_mode_off|data_usage_exceeded|user_abroad_roaming_disabled_on[PERSONA:Hard]'
+- '[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Easy]'
+- '[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]'
+- '[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]'
+- '[mms_issue]bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_mode_off|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]'

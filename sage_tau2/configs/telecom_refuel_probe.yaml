@@ -1,0 +1,63 @@
+# Targeted probe: 6 known-failing refuel_data tasks from train_large
+# (3 pure_refuel + 3 combo roaming+refuel, Easy/None/Hard mixed).
+#
+# Question under test: can one verdict-feedback retry rescue the
+# wrong-line near-misses (L1001 vs L1002), and can a single rescued win
+# let distill bootstrap a refuel_data skill (min_support: 1)?
+#
+# Control run: set retry_write_fails: false (expected 0/6, matches the
+# 56-episode 0-win observation in the main run).
+#
+# cd ~/verl-agent/tau2-bench
+# PYTHONPATH=.. uv run python -m sage_tau2.runners.online_tau2 \
+#   --config ../sage_tau2/configs/telecom_refuel_probe.yaml \
+#   --output ../logs/sage_tau2/telecom_refuel_probe_retry \
+#   --llm-config ../examples/prompt_agent/llm_config.yaml
+
+domain: telecom
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+
+task_split_name: train_large
+task_ids:
+  # pure_refuel（无 roaming bug，注入门匹配不上现有技能）
+  - "[mms_issue]break_app_storage_permission|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+  - "[mms_issue]bad_wifi_calling|break_apn_mms_setting|data_usage_exceeded|user_abroad_roaming_enabled_off[PERSONA:None]"
+  - "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_enabled_off[PERSONA:Hard]"
+  # combo（roaming + refuel，可吃到 EnableRoamingSpecialist 的技能注入）
+  - "[mms_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]"
+  - "[mms_issue]airplane_mode_on|bad_network_preference|break_apn_mms_setting|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:None]"
+  - "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_app_sms_permission|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:Hard]"
+segment_size: 6
+num_segments: 1
+seed: 42
+max_concurrency: 6
+val_size: 0
+
+seed_skills: false
+max_inject_skills: 2
+allow_provisional_inject: true
+# Must stay false: with freeze_organization=true the runner passes
+# organization_path=None to collection, which disables specialist dispatch
+# and therefore skill injection entirely (inject=0 for every episode).
+freeze_organization: false
+inject_same_domain_only: true
+
+# The intervention under test: one verdict-feedback retry on write-gold fails.
+retry_write_fails: true
+retry_k: 1
+
+# Distill gates: a single rescued win is enough to create a candidate skill.
+min_support: 1
+require_success: true
+min_protocol_len: 2
+max_new_skills: 12
+verify_score: 0.5
+prune_score: 0.2
+min_protocol_coverage: 0.75
+min_support_for_verified: 3
+credit_require_full_write_spine: true
+credit_per_episode_inject: true
+
+dump_pro_trajectories: true
+agent_name: sage_tau2

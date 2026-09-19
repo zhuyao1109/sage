@@ -1,0 +1,119 @@
+# Gate ablation: credit ON + FIXED inject during evolution (gate_injected_skills=false).
+# Same as skill_creditON_train600_eo.yaml except gate off for train play.
+# Compare to creditON_train600_eo (gate=true) → freeze OOD134.
+# Post-eval: skill_creditON_train600_eo_fixed_test134.yaml (also gate=false).
+
+sage:
+  allow_provisional_org_edits: false
+  skill_bank_path: null
+  redundancy_threshold: 0.9
+  distillation:
+    mode: heuristic
+    high_cost_steps: 25
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+    max_evidence_trajectories: 3
+    max_steps_per_trajectory: 15
+    max_fragments: 5
+  skill_credit:
+    verify_score: 0.6
+    prune_score: 0.2
+    min_uses_for_promotion: 1
+    min_uses_for_pruning: 3
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 999
+    min_failure_rate: 0.0
+    min_assignment_gap: 0.1
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    max_new_agents_per_round: 0
+    cluster_by: capability
+    dispatch_only_new_agents: true
+    probation_games: 3
+    add_when_uncovered_capability: false
+  executor_dispatch:
+    enabled: true
+    allow_dormant: true
+    auto_assign_single: false
+    prefer_matching_specialist: true
+    llm_only_dispatch: false
+  shadow:
+    enabled: false
+  online:
+    num_games: 600
+    collection_dataset: train
+    segment_size: 60
+    parallel_envs: 32
+    api_concurrency: 32
+    llm_timeout: 90
+    llm_max_retries: 1
+    game_selection: family_proportional
+    seed: 1
+    temperature: 0.0
+    executor_model: gpt-4o-mini
+    specialist_model: gpt-4o-mini
+    acceptor_model: gpt-4o-mini
+    max_skills_per_round: 6
+    mechanism_dataset: valid_unseen
+    shadow_pool_size: 0
+    skip_shadow: true
+    commit_org_on_last_segment: false
+    executor_only: false
+    freeze_organization: true
+    ignore_assigned_skills: false
+    max_advisors: 0
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: true
+    distill_prior_segments: 2
+    stop_when_no_candidates: false
+    gate_injected_skills: false
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    prefer_proven_skills: false
+    probation_min_games: 3
+    probation_min_wins: 2
+    probation_epsilon: 0.0
+    remove_after_rejected_windows: 2
+    val_eval:
+      enabled: true
+      every_segment: true
+      pool_size: 140
+      dataset: valid_seen
+      parallel_envs: 32
+      api_concurrency: 32
+    test_eval:
+      enabled: false
+  skill_lifecycle:
+    negative_utility_threshold: 0.0
+    negative_utility_decay: 0.5
+    retire_after_negative: 0
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      role_specification: "Sole ALFWorld actor with optional injected skill protocols."
+      responsibility_boundary: "In scope: observation interpretation and action selection."
+      responsibilities:
+        - Interpret ALFWorld observations
+        - Select and execute admissible environment actions
+        - Follow injected verified skill protocols when preconditions match
+      assigned_skills: []
+      tool_permissions:
+        - alfworld_action
+      activation_condition: "Always active during environment interaction."
+      input_protocol: "Input: ALFWorld observation template; optional active skill protocols."
+      output_protocol: "Output exactly one <think>...</think><action>admissible action</action> decision."
+      communication_edges: []
+      token_budget: null
+      turn_budget: null
+      retirement_condition: null
+      shadow_evaluation_record:
+        status: "baseline"
+  enable_action_guards: false
+  compact_alfworld_prompts: false

@@ -1,0 +1,91 @@
+# F2: frozen S1 bank + fixed-prefix inject (gate=false), single Executor.
+
+sage:
+  allow_provisional_org_edits: false
+  skill_bank_path: null
+  redundancy_threshold: 0.9
+  disable_merge: true
+  distillation:
+    mode: heuristic
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+  skill_credit:
+    verify_score: 0.6
+    prune_score: 0.2
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 999
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    max_new_agents_per_round: 0
+  executor_dispatch:
+    enabled: false
+    allow_dormant: true
+    auto_assign_single: false
+    prefer_matching_specialist: true
+    require_accepted_for_primary: false
+  shadow:
+    enabled: false
+  online:
+    num_games: 134
+    collection_dataset: valid_unseen
+    segment_size: 134
+    parallel_envs: 1
+    api_concurrency: 1
+    llm_timeout: 180
+    llm_max_retries: 3
+    game_selection: first
+    seed: 1
+    temperature: 0.0
+    executor_model: gemini-2.5-flash
+    specialist_model: gemini-2.5-flash
+    acceptor_model: gemini-2.5-flash
+    max_skills_per_round: 0
+    skip_shadow: true
+    freeze_organization: true
+    executor_only: false
+    ignore_assigned_skills: false
+    max_advisors: 0
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: false
+    stop_when_no_candidates: true
+    gate_injected_skills: false
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    prefer_proven_skills: true
+    val_eval:
+      enabled: false
+    test_eval:
+      enabled: false
+  enable_action_guards: false
+  compact_alfworld_prompts: false
+  seed_skill_bank_path: "logs/sage_mas/ablation_frozen_assets/bank_S1_verified.json"
+  seed_skill_statuses:
+    - verified
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      role_specification: "Sole ALFWorld actor with optional frozen skill protocols."
+      responsibility_boundary: "In scope: observation interpretation and action selection."
+      responsibilities:
+        - Interpret ALFWorld observations
+        - Select and execute admissible environment actions
+        - Follow injected verified skill protocols when available
+      assigned_skills: []
+      tool_permissions:
+        - alfworld_action
+      activation_condition: "Always active during environment interaction."
+      input_protocol: "Input: ALFWorld observation template; optional active skill protocols."
+      output_protocol: "Output exactly one <think>...</think><action>admissible action</action> decision."
+      communication_edges: []
+      token_budget: null
+      turn_budget: null
+      retirement_condition: null
+      shadow_evaluation_record:
+        status: "baseline"

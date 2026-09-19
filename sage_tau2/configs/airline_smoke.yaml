@@ -1,0 +1,27 @@
+# SAGE-τ² online smoke (isolated from sage_mas / ALFWorld).
+# Writes only under logs/sage_tau2/ when --output points there.
+#
+# cd ~/verl-agent/tau2-bench
+# PYTHONPATH=.. uv run python -m sage_tau2.runners.online_tau2 \
+#   --config ../sage_tau2/configs/airline_smoke.yaml \
+#   --output ../logs/sage_tau2/airline_smoke \
+#   --llm-config ../examples/prompt_agent/llm_config.yaml
+
+domain: airline
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+segment_size: 5
+num_segments: 2
+seed: 42
+max_concurrency: 1
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: true
+min_support: 1
+require_success: true
+min_protocol_len: 1
+max_new_skills: 16
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.5
+agent_name: sage_tau2

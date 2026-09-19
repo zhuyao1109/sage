@@ -1,0 +1,161 @@
+\section{Method}
+
+\subsection{Problem Formulation}
+
+We consider an LLM-based multi-agent system that processes a sequence of tasks $\mathcal{T}=\{x_t\}_{t=1}^{T}$ drawn from a task distribution $\mathcal{D}$. For each task $x_t$, the system interacts with the environment and produces a trajectory $\tau_t$, which contains agent observations, actions and inter-agent communication. The environment then provides task feedback $y_t$, such as a success or failure indicator.
+
+At time step $t$, the system is characterized by a skill bank $\mathcal{B}_t$ and an organizational structure $\mathcal{O}_t$. The skill bank stores reusable knowledge acquired from previous task experience:
+\begin{equation}
+    \mathcal{B}_t = \{s_i\}_{i=1}^{N_t}
+\end{equation}
+where each $s_i$ represents a skill that can be applied to future tasks. The organizational structure is represented as
+\begin{equation}
+    \mathcal{O}_t = (\mathcal{A}_t, \mathcal{R}_t, \Phi_t)
+\end{equation}
+where $\mathcal{A}_t$ denotes the set of agents, $\mathcal{R}_t$ denotes their roles, and $\Phi_t$ specifies the assignment of skills to agents. Together, $\mathcal{B}_t$ and $\mathcal{O}_t$ determine how the system handles the current task.
+
+Given a task $x_t$, we denote the resulting task performance by
+\begin{equation}
+    R(x_t; \mathcal{B}_t, \mathcal{O}_t)
+\end{equation}
+Our goal is to improve performance over the task sequence by jointly adapting the skill bank and the organizational structure:
+\begin{equation}
+    \max_{\{\mathcal{B}_t,\mathcal{O}_t\}_{t=1}^{T}}
+    \frac{1}{T}\sum_{t=1}^{T}
+    \mathbb{E}_{x_t \sim \mathcal{D}}
+    \left[R(x_t,\mathcal{B}_t,\mathcal{O}_t)\right]
+\end{equation}
+The key challenge is that the two components are interdependent: accumulated skills provide evidence about the capabilities required by the task distribution, while the organization determines how these skills are assigned and used. We therefore study their joint evolution from task experience, as introduced in the following sections.
+
+
+\subsection{Overview of the Co-Evolution Framework}
+
+Our framework operates in an online learning setting where the system evolves through repeated interactions with tasks from the environment. At each evolution cycle, the system:
+
+\begin{enumerate}
+    \item \textbf{Collects trajectories} from $m$ tasks, producing experience $\{\tau_i, y_i\}_{i=1}^{m}$
+    \item \textbf{Distills skills} from successful trajectories into provisional skill bank entries
+    \item \textbf{Tracks utility} of each skill through online feedback and prunes low-performing skills
+    \item \textbf{Diagnoses organizational gaps} by comparing current capabilities with task distribution requirements
+    \item \textbf{Proposes organizational modifications} (adding specialists, reassigning skills) when gaps are detected
+    \item \textbf{Validates modifications} through paired evaluation before committing changes
+\end{enumerate}
+
+This design enforces a strict evidence hierarchy: skills must prove their utility before triggering organizational changes, and organizational changes must demonstrate improvement over the current structure before being adopted. We now describe each component in detail.
+
+
+\subsection{Experience-Driven Skill Evolution}
+
+\subsubsection{Trajectory-Grounded Skill Distillation}
+
+Given a batch of trajectories $\{\tau_i\}_{i=1}^{m}$ collected during task execution, we extract reusable skills through a multi-stage distillation process. Each trajectory $\tau_i = \{(o_j, a_j)\}_{j=1}^{L_i}$ consists of observations $o_j$ and actions $a_j$.
+
+\textbf{Capability clustering.} We first identify capability markers from trajectories. For each trajectory, we extract environment-grounded signals such as objects manipulated, spatial relationships changed, or goal progress indicators. Trajectories exhibiting similar capability markers are clustered together:
+\begin{equation}
+    C_k = \{\tau_i \mid \text{capability}(\tau_i) = k\}
+\end{equation}
+where $k$ represents a capability type (e.g., ``transform object state'', ``track inventory changes'').
+
+\textbf{Protocol extraction.} For each capability cluster $C_k$ with at least $w_{\min}$ successful trajectories, we extract a shared action protocol. We remove exploratory detours by identifying the minimal action subsequence that achieves the capability effect:
+\begin{equation}
+    \pi_k = \text{MergeProtocols}(\{\text{RemoveDetours}(\tau_i) \mid \tau_i \in C_k, y_i = 1\})
+\end{equation}
+The protocol $\pi_k$ is represented as an ordered sequence of abstract action templates with variable slots (e.g., ``\texttt{take <object>}'', ``\texttt{use <tool> on <target>}'').
+
+\textbf{Contract formulation.} We formalize each skill as a triple:
+\begin{equation}
+    s_k = (\text{anchor}_k, \text{protocol}_k, \text{effect}_k)
+\end{equation}
+where $\text{anchor}_k$ specifies the preconditions for skill applicability (e.g., object states, inventory contents), $\text{protocol}_k$ is the action sequence, and $\text{effect}_k$ describes the expected environmental outcome. Skills enter the bank with \emph{provisional} status and initial utility score $u_0 = 0.5$ (Laplace-smoothed prior with zero observations).
+
+\subsubsection{Feedback-Driven Utility Tracking and Pruning}
+
+To evaluate skill utility, we track their usage and effectiveness during subsequent task execution through an online credit assignment mechanism.
+
+\textbf{Usage detection.} When an agent executes actions during task $x_t$, we check whether any skill's protocol was followed. A skill $s_k$ is marked as \emph{used} if:
+\begin{enumerate}
+    \item The anchor condition $\text{anchor}_k$ matches the current observation
+    \item The agent's action sequence covers at least $\gamma$ fraction of the protocol (default $\gamma = 0.5$)
+    \item The executed actions are grounded in the environment (not exploratory navigation)
+\end{enumerate}
+
+\textbf{Success attribution.} A skill usage is counted as a \emph{success} if the expected environmental effect $\text{effect}_k$ is observed after protocol execution. We verify this by comparing environment state before and after:
+\begin{equation}
+    \text{success}_k = \mathbb{I}[\text{effect}_k \text{ observed in } (s_{\text{before}}, s_{\text{after}})]
+\end{equation}
+
+\textbf{Laplace-smoothed utility.} We maintain a utility score for each skill based on its empirical success rate with Laplace smoothing:
+\begin{equation}
+    u_k(t) = \frac{n_{\text{success}}^k(t) + 1}{n_{\text{use}}^k(t) + 2}
+\end{equation}
+where $n_{\text{success}}^k(t)$ and $n_{\text{use}}^k(t)$ are the cumulative counts up to time $t$. The smoothing ensures new skills start at $u_k(0) = 0.5$ and converge to the true success rate with more observations.
+
+\textbf{Promotion and pruning.} Skills transition between three states based on their utility:
+\begin{itemize}
+    \item \textbf{Provisional $\rightarrow$ Verified}: If $u_k \geq \theta_v$ (default $\theta_v = 0.60$) with at least $n_{\min} = 1$ use
+    \item \textbf{Verified $\rightarrow$ Pruned}: If $u_k < \theta_p$ (default $\theta_p = 0.20$) with at least $n_{\min}^{\text{prune}} = 3$ uses
+\end{itemize}
+Only verified skills can trigger organizational modifications. This two-stage gating ensures that organizational changes are driven by empirically validated capabilities.
+
+
+\subsection{Skill-Guided Organization Evolution}
+
+\subsubsection{Skill-Based Organizational Diagnosis and Modification}
+
+The system periodically diagnoses whether the current organizational structure $\mathcal{O}_t$ adequately covers the capabilities required by the task distribution. This diagnosis is skill-driven: accumulated verified skills provide distributional evidence about what capabilities matter.
+
+\textbf{Capability distribution tracking.} We maintain an experience distribution snapshot:
+\begin{equation}
+    D_t = \{(c_k, f_k)\}_{k=1}^{K}
+\end{equation}
+where $c_k$ is a capability type and $f_k$ is its frequency in recent trajectories. We compare this distribution against the historical baseline $D_{\text{hist}}$ to detect emerging capability shifts:
+\begin{equation}
+    \Delta_k = f_k^{\text{current}} - f_k^{\text{historical}}
+\end{equation}
+
+\textbf{Assignment gap detection.} For each capability cluster with significant shift ($\Delta_k > \delta_{\text{shift}}$, default $\delta_{\text{shift}} = 0.05$), we check whether the current organization has a specialist agent covering it. If capability $c_k$ is only handled by the general executor agent, we detect an \emph{assignment gap}:
+\begin{equation}
+    \text{gap}_k = \mathbb{I}[\Phi_t(c_k) = \{\text{Executor}\}] \cdot \mathbb{I}[\Delta_k > \delta_{\text{shift}}]
+\end{equation}
+
+\textbf{Specialist nomination.} When an assignment gap is detected for a verified skill cluster, the system nominates a new specialist agent. The specialist is initialized with:
+\begin{itemize}
+    \item \textbf{Role description}: Generated from the capability cluster's verified skills
+    \item \textbf{Skill portfolio}: All verified skills in cluster $c_k$ assigned via $\Phi_{t+1}$
+    \item \textbf{Capability contract}: Specifies when the specialist should be dispatched (task features matching $c_k$)
+\end{itemize}
+
+The specialist enters the organization in \emph{probation} status and can only be dispatched when explicitly selected by the executor.
+
+\subsubsection{Validation-Gated Organization Update and Rollback}
+
+Before committing an organizational modification, we validate that it improves performance through paired evaluation.
+
+\textbf{Shadow evaluation.} For a proposed modification (e.g., adding specialist $a_{\text{new}}$), we conduct paired evaluation on $n_{\text{shadow}}$ held-out tasks (default $n_{\text{shadow}} = 8$):
+\begin{align}
+    \mathcal{O}_{\text{old}} &= (\mathcal{A}_t, \mathcal{R}_t, \Phi_t) \\
+    \mathcal{O}_{\text{new}} &= (\mathcal{A}_t \cup \{a_{\text{new}}\}, \mathcal{R}_t \cup \{r_{\text{new}}\}, \Phi_{t+1})
+\end{align}
+
+For each held-out task $x_j$, we run both organizations and measure success rates:
+\begin{equation}
+    \text{SR}_{\text{old}} = \frac{1}{n_{\text{shadow}}}\sum_{j=1}^{n_{\text{shadow}}} R(x_j; \mathcal{O}_{\text{old}}), \quad
+    \text{SR}_{\text{new}} = \frac{1}{n_{\text{shadow}}}\sum_{j=1}^{n_{\text{shadow}}} R(x_j; \mathcal{O}_{\text{new}})
+\end{equation}
+
+\textbf{Admission criterion.} The specialist is admitted to the active organization if:
+\begin{equation}
+    \text{SR}_{\text{new}} \geq \text{SR}_{\text{old}} + \epsilon_{\text{advantage}}
+\end{equation}
+where $\epsilon_{\text{advantage}}$ is a minimum advantage threshold (default $\epsilon_{\text{advantage}} = 0.0$). If this criterion is met, the specialist's associated skills transition to \emph{verified} status and the specialist moves from probation to active. Otherwise, the modification is rejected and skills remain provisional.
+
+\textbf{Probation mechanism.} Admitted specialists still undergo probation monitoring. They collect dispatch statistics (primary assignments, task wins) and must demonstrate consistent performance:
+\begin{itemize}
+    \item Minimum $n_{\text{dispatch}} = 3$ primary dispatches
+    \item Minimum $n_{\text{win}} = 2$ task completions
+    \item Success rate not worse than executor baseline on the same capability scope
+\end{itemize}
+
+Only after meeting these criteria does the specialist transition from probation to fully \emph{accepted} status. This multi-stage validation (shadow evaluation $\rightarrow$ probation $\rightarrow$ acceptance) ensures organizational stability: a single lucky win cannot trigger permanent structural change.
+
+\textbf{Rollback mechanism.} If a probation specialist fails to meet acceptance criteria after a grace period, the system demotes it to dormant status and reverts the associated skill assignments back to the executor. This rollback preserves the learned skills while undoing the organizational commitment.

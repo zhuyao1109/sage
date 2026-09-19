@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import os
 import yaml
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-import torch
-import torchvision.transforms as T
 import ray
 
 from agent_system.environments.env_package.alfworld.alfworld.agents.environment import get_environment
@@ -34,6 +33,9 @@ def load_config_file(path):
     return config
 
 def get_obs_image(env):
+    import torch
+    import torchvision.transforms as T
+
     transform = T.Compose([T.ToTensor()])
     current_frames = env.get_frames()
     image_tensors = [transform(i).cuda() for i in current_frames]
@@ -92,8 +94,14 @@ class AlfworldEnvs(gym.Env):
             
         eval_dataset = env_kwargs.get('eval_dataset', 'eval_in_distribution')
         config = load_config_file(alf_config_path)
+        if 'num_eval_games' in env_kwargs:
+            config['dataset']['num_eval_games'] = env_kwargs['num_eval_games']
+        if 'game_files_list' in env_kwargs:
+            config['dataset']['game_files_list'] = env_kwargs['game_files_list']
+
         env_type = config['env']['type']
-        base_env = get_environment(env_type)(config, train_eval='train' if is_train else eval_dataset)
+        train_eval = 'train' if is_train else eval_dataset
+        game_files_list = env_kwargs.get('game_files_list')
         self.multi_modal = (env_type == 'AlfredThorEnv')
         self.num_processes = env_num * group_n
         self.group_n = group_n
@@ -102,7 +110,13 @@ class AlfworldEnvs(gym.Env):
         env_worker = ray.remote(**resources_per_worker)(AlfworldWorker)
         self.workers = []
         for i in range(self.num_processes):
-            worker = env_worker.remote(config, seed + (i // self.group_n), base_env)
+            worker_config = copy.deepcopy(config)
+            worker_game_files = None
+            if game_files_list and i < len(game_files_list):
+                worker_game_files = [game_files_list[i]]
+                worker_config['dataset']['game_files_list'] = worker_game_files
+            worker_base_env = get_environment(env_type)(worker_config, train_eval=train_eval)
+            worker = env_worker.remote(worker_config, seed + (i // self.group_n), worker_base_env)
             self.workers.append(worker)
 
         self.prev_admissible_commands = [None for _ in range(self.num_processes)]

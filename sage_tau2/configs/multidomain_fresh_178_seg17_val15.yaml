@@ -1,0 +1,67 @@
+# Multi-domain fresh evolve: segment_size=17, evolve each seg, fixed val retest.
+#
+# Train: 178 − 15 holdout = 163 unique tasks (no resampling).
+# Quotas/seg ≈ airline:retail:telecom = 3:7:7.
+# Coverage: 9 full segments (153) + 1 partial (10) ≈ 163 → num_segments=10.
+# Val: 15 fixed (≈3:6:6), re-run after each segment evolve (no distill).
+#
+# Protocol per segment:
+#   collect (prior-segment inject) → distill/cluster → nominate/admit → val
+
+model: openai/gemini-2.5-flash
+user_model: openai/gemini-2.5-flash
+seed: 42
+max_concurrency: 6
+max_inject_skills: 2
+allow_provisional_inject: true
+freeze_organization: false
+inject_same_domain_only: true
+
+segment_size: 17
+num_segments: 10
+task_split_name: train
+allow_task_resampling: false
+domain_weights:
+  airline: 30
+  retail: 74
+  telecom: 74
+
+val_size: 15
+val_split_name: train
+val_exclude_from_train: true
+dump_val_pro_trajectories: true
+
+min_support: 2
+require_success: true
+min_protocol_len: 2
+max_new_skills: 12
+verify_score: 0.60
+prune_score: 0.20
+min_protocol_coverage: 0.50
+# sage_mas online600-style: distill over current + last 2 segments' eligible traces
+distill_prior_segments: 2
+
+cluster_novelty_threshold: 0.35
+nominate_min_cluster_support: 2
+nominate_min_utility: 0.50
+max_new_agents_per_round: 1
+dispatch_only_new_agents: true
+probation_games: 3
+allow_provisional_org_edits: false
+require_same_domain_for_nominate: true
+no_spec_mode: editor_commit
+
+enable_spec_vs_exec: true
+admit_num_tasks: 6
+admit_min_advantage: 0.0
+admit_accept_ties: false
+admit_on_fail_action: remove
+admit_min_utility: 0.60
+admit_min_support: 2
+
+probation_min_games: 3
+probation_min_wins: 2
+remove_after_rejected_windows: 2
+probation_primary_quota: 0
+
+agent_name: sage_tau2

@@ -1,0 +1,202 @@
+# Online 500 learning-curve protocol (light held-out eval).
+#
+# Train: 500 ALFWorld train tasks, segment_size=20
+# Every segment: fixed val@10 (valid_seen) + test@10 (valid_unseen)
+# Extra env cost: 25 * (10+10) = 500 → total ~1000 episodes
+# Org frozen (skill-only); shadow skipped so val is not mixed with org fork.
+#
+#   PYTHONUNBUFFERED=1 python -m sage_mas.runners.online_alfworld \
+#     --llm-config examples/prompt_agent/llm_config.yaml \
+#     --sage-config examples/sage_mas/sage_config.online500_curve.yaml \
+#     --output logs/sage_mas/online500_curve_bmu_seed1
+#
+#   python -m sage_mas.runners.plot_learning_curve \
+#     --input logs/sage_mas/online500_curve_bmu_seed1/online_state.json \
+#     --output-dir logs/sage_mas/online500_curve_bmu_seed1
+
+sage:
+  allow_provisional_org_edits: false
+  skill_bank_path: null
+  redundancy_threshold: 0.90
+
+  distillation:
+    mode: trajectory_enriched
+    model: gemini-2.5-pro
+    temperature: 0.0
+    max_completion_tokens: 8192
+    max_retries: 2
+    high_cost_steps: 25
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+    max_evidence_trajectories: 3
+    max_steps_per_trajectory: 15
+    max_fragments: 5
+    exclude_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    exclude_signals:
+      - efficient_execution
+      - task_completion
+      - progress_checkpoint
+      - failure_checkpoint
+      - admissible_action_guard
+      - stagnation_recovery
+      - repetition_guard
+      - search_exhaustion
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+    min_uses_for_promotion: 1
+    min_uses_for_pruning: 3
+    require_positive_mu_for_verify: true
+    min_marginal_utility: 0.0
+    relative_credit_to_baseline: true
+    min_protocol_coverage: 0.5
+    paired_mu_num_tasks: 6
+    paired_mu_require_ci: false
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 999
+    min_failure_rate: 0.0
+    min_assignment_gap: 0.1
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    cluster_by: capability
+    dispatch_only_new_agents: true
+    probation_games: 3
+
+  executor_dispatch:
+    enabled: true
+    allow_dormant: true
+    auto_assign_single: false
+
+  shadow:
+    enabled: false
+    num_tasks: 4
+    seed: 202
+    temperature: 0.0
+    save_steps: true
+    max_advisors: 0
+    gate_assigned_skills: true
+    cost_weight: 0.0
+    agent_count_weight: 0.0
+    min_relative_gain: 0.0
+    bootstrap_samples: 500
+    confidence_level: 0.95
+    require_confident_gain: false
+    min_paired_tasks: 1
+
+  online:
+    num_games: 500
+    collection_dataset: train
+    segment_size: 20
+    parallel_envs: 16
+    api_concurrency: 16
+    game_selection: first
+    seed: 1
+    temperature: 0.4
+    max_skills_per_round: 3
+    mechanism_dataset: valid_seen
+    shadow_pool_size: 0
+    skip_shadow: true
+    commit_org_on_last_segment: false
+    executor_only: false
+    freeze_organization: true
+    ignore_assigned_skills: false
+    max_advisors: 0
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: true
+    stop_when_no_candidates: false
+    gate_injected_skills: true
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    require_positive_mu_for_injection: true
+    # MU probes add env cost; keep off for the curve run (credit already gated).
+    paired_mu_probe: false
+    paired_mu_num_tasks: 6
+    paired_mu_require_ci: false
+    run_control_eval_for_credit: false
+    probation_min_games: 3
+    probation_min_wins: 2
+    probation_epsilon: 0.0
+    remove_after_rejected_windows: 2
+    distill_prior_segments: 2
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+    # Fixed held-out probes every segment → 3 learning-curve lines.
+    val_eval:
+      enabled: true
+      every_segment: true
+      pool_size: 10
+      dataset: valid_seen
+    test_eval:
+      enabled: true
+      every_segment: true
+      pool_size: 10
+      dataset: valid_unseen
+
+  skill_lifecycle:
+    negative_utility_threshold: 0.0
+    negative_utility_decay: 0.5
+    retire_after_negative: 0
+
+  agents:
+    - name: "Executor"
+      role: "Environment executor"
+      role_specification: "Sole ALFWorld actor with optional injected skill protocols. Interpret observations and execute admissible environment actions."
+      responsibility_boundary: "In scope: observation interpretation, skill-conditioned action selection. Out of scope: spawning specialists."
+      responsibilities:
+        - "Interpret ALFWorld observations"
+        - "Select and execute admissible environment actions"
+        - "Follow injected verified skill protocols when preconditions match"
+      assigned_skills: []
+      tool_permissions:
+        - "go to"
+        - "open"
+        - "close"
+        - "take"
+        - "put"
+        - "clean"
+        - "heat"
+        - "cool"
+        - "use"
+        - "inventory"
+        - "examine"
+        - "look"
+        - "alfworld_action"
+      activation_condition: "Always active during environment interaction."
+      input_protocol: "Input: ALFWorld observation template; optional active skill protocols."
+      output_protocol: "Output exactly one <think>...</think><action>admissible action</action> decision."
+      communication_edges: []
+      token_budget: 512
+      turn_budget: null
+      retirement_condition: null
+      shadow_evaluation_record:
+        status: "baseline"

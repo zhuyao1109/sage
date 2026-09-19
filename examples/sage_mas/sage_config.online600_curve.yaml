@@ -1,0 +1,193 @@
+# SAGE online 600: full learning-curve experiment.
+#
+# 600 train games (10 segments x 60), credit-only verification (MU off).
+# After EVERY segment: validation on 140 valid_seen games (learning curve).
+# At segment 1 (baseline) and segment 10 (final): test on 134 valid_unseen.
+#
+# Produces online_state.json consumed by plot_learning_curve.py to draw
+# the train/val/test learning curves.
+#
+# Seed:  logs/sage_mas/cold_start_60_gemini-2.5-pro_n10/skill_bank_v6_llm.json
+# Org:   Executor-only (no specialists at seed)
+# Scale: 600 train / segment_size=60 -> 10 segments; val 140 x10; test 134 x2.
+
+sage:
+  allow_provisional_org_edits: false
+  seed_organization_path: logs/sage_mas/online_grow_v1/seed_organization.json
+  seed_skill_bank_path: logs/sage_mas/cold_start_60_gemini-2.5-pro_n10/skill_bank_v6_llm.json
+  seed_skill_statuses:
+    - provisional
+  redundancy_threshold: 0.90
+  disable_merge: true
+
+  distillation:
+    mode: heuristic
+    llm_protocol_overlay: true
+    model: gemini-2.5-flash
+    temperature: 0.0
+    max_completion_tokens: 8192
+    max_retries: 2
+    high_cost_steps: 25
+    min_support: 1
+    operation_min_support: 1
+    min_family_support: 1
+    max_evidence_trajectories: 3
+    max_steps_per_trajectory: 15
+    max_fragments: 5
+    min_wins_for_protocol: 3
+    exclude_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    exclude_signals:
+      - efficient_execution
+      - progress_checkpoint
+      - failure_checkpoint
+      - admissible_action_guard
+      - stagnation_recovery
+      - repetition_guard
+      - search_exhaustion
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+
+  clustering:
+    enabled: true
+    novelty_threshold: 0.05
+
+  skill_credit:
+    verify_score: 0.60
+    prune_score: 0.20
+    min_uses_for_promotion: 1
+    min_uses_for_pruning: 3
+    require_positive_mu_for_verify: false
+    min_marginal_utility: 0.0
+    relative_credit_to_baseline: false
+    min_protocol_coverage: 0.5
+    min_adherence_for_use: 0.34
+    min_adherence_for_verify: 0.34
+    combine_adherence_with_effect: true
+    require_task_win_for_success: false
+
+  assignment_gap:
+    role_weight: 0.7
+    tool_weight: 0.3
+    empirical_weight: 0.0
+
+  organization:
+    distribution_shift_threshold: 0.15
+    min_cluster_support: 1
+    min_failure_rate: 0.0
+    min_assignment_gap: 0.1
+    allow_bootstrap_add: false
+    max_bootstrap_agents_per_round: 0
+    max_new_agents_per_round: 1
+    cluster_by: capability
+    dispatch_only_new_agents: true
+    probation_games: 3
+    require_executable_protocol: true
+    require_trajectory_executable_protocol: true
+    min_protocol_adherence_for_add_agent: 0.34
+    require_positive_mu_for_add_agent: false
+    min_marginal_utility_for_add_agent: 0.0
+
+  executor_dispatch:
+    enabled: true
+    allow_dormant: false
+    auto_assign_single: true
+    require_accepted_for_primary: true
+    prefer_matching_specialist: true
+    probation_primary_quota: 8
+
+  shadow:
+    enabled: false
+
+  online:
+    num_games: 600
+    collection_dataset: train
+    segment_size: 60
+    parallel_envs: 24
+    api_concurrency: 24
+    llm_timeout: 90
+    llm_max_retries: 1
+    game_selection: family_proportional
+    seed: 1
+    temperature: 0.0
+    executor_model: gemini-2.5-flash
+    specialist_model: gemini-2.5-flash
+    acceptor_model: gemini-2.5-flash
+    max_skills_per_round: 6
+    mechanism_dataset: valid_unseen
+    skip_shadow: true
+    commit_org_on_last_segment: true
+    freeze_organization: false
+    propose_org_for_unassigned_skills: false
+    org_warmup_segments: 1
+    actor_promotion_probe: false
+    ignore_assigned_skills: false
+    max_advisors: 0
+    max_injected_skills: 2
+    save_steps: true
+    distill_after_last_segment: true
+    stop_when_no_candidates: false
+    gate_injected_skills: true
+    gate_assigned_skills: true
+    use_visited_location_memory: false
+    require_positive_mu_for_injection: false
+    min_marginal_utility: 0.0
+    paired_mu_probe: false
+    paired_mu_num_tasks: 2
+    paired_mu_require_ci: false
+    run_control_eval_for_credit: false
+    probation_min_games: 3
+    probation_min_wins: 2
+    probation_epsilon: 0.0
+    remove_after_rejected_windows: 2
+    distill_prior_segments: 2
+    block_injection_capability_prefixes:
+      - "execution."
+      - "recovery."
+      - "action."
+      - "search."
+    inject_capability_allowlist:
+      - "transform."
+      - "track."
+      - "inspect."
+    # Validation: 140 valid_seen games after EVERY segment (10 checkpoints).
+    # This is the learning curve.
+    val_eval:
+      enabled: true
+      every_segment: true
+      pool_size: 140
+      dataset: valid_seen
+      parallel_envs: 24
+      api_concurrency: 24
+    # Test: 134 valid_unseen games at segment 1 (baseline) and segment 10 (final).
+    # every_n_segments=10 -> runs at round 1 and round 10 (last).
+    test_eval:
+      enabled: true
+      every_segment: false
+      every_n_segments: 10
+      pool_size: 134
+      dataset: valid_unseen
+      only_after_add_agent: false
+      model: gemini-2.5-flash
+      parallel_envs: 24
+      api_concurrency: 24
+
+  skill_lifecycle:
+    retire_after_negative: 0
+    negative_utility_threshold: 0.0
+    negative_utility_decay: 0.5
+
+  agents: []
+
+  enable_action_guards: false
+  compact_alfworld_prompts: false
