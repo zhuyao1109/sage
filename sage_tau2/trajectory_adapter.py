@@ -114,6 +114,13 @@ def _tool_steps_from_pro_steps(
                 content = payload
                 errored = block_err
                 break
+            if "tool_results" in step:
+                # New exports preserve exact results and call identity, even
+                # when parallel calls return out of order or share a name.
+                result = next((r for r in step["tool_results"]
+                               if str(r.get("tool_call_id") or r.get("id") or "") == call_id), None)
+                content = str(result.get("content") or "") if result is not None else None
+                errored = bool(result.get("error")) if result is not None else False
             tool_steps.append(
                 ToolCallStep(
                     name=name,
@@ -138,7 +145,10 @@ def pro_record_to_trajectory(record: dict[str, Any]) -> Tau2Trajectory:
     db_match = record.get("db_match")
     if db_match is not None:
         db_match = bool(db_match)
+    from sage_tau2.contracts import skill_events_from_steps
     metadata = {
+        "skill_events": skill_events_from_steps(steps),
+        "interaction_sequence": [event for s in steps for event in s.get("interaction_sequence", [])],
         "success_mode": distill_meta.get("success_mode"),
         "action_checks": distill_meta.get("action_checks"),
         "communicate_checks": distill_meta.get("communicate_checks"),

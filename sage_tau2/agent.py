@@ -1,8 +1,7 @@
 """τ² HalfDuplex agent with Executor dispatch + specialist skill ownership.
 
-Mirrors sage_mas runtime handoff:
-  episode-start ExecutorDispatcher.assign → sticky primary
-  → specialist gets only assigned skills; Executor gets bank inject.
+Executor owns the episode and may delegate successive bounded turns.
+Forced-primary mode remains available for paired admission experiments.
 
 Registered at runtime by the sage_tau2 online runner.
 """
@@ -16,7 +15,7 @@ from pathlib import Path
 from typing import Any, Generic, List, Optional, TypeVar
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from sage_tau2.executor_dispatch import (
     AgentAssignment,
@@ -36,6 +35,7 @@ from sage_tau2.injection import (
     append_skills_to_user_prompt,
     candidate_pool_for_domain,
     format_skills_for_prompt,
+    render_skill_cards,
     offer_skills_for_domain,
 )
 from sage_tau2.skill_retrieval import SkillIndex
@@ -81,6 +81,8 @@ from tau2.utils.llm_utils import generate
 class SageTau2State(BaseModel):
     system_messages: list[SystemMessage]
     messages: list[APICompatibleMessage]
+    executions: list[dict] = Field(default_factory=list)
+    current_execution_id: str = ""
 
 
 SageTau2StateType = TypeVar("SageTau2StateType", bound=SageTau2State)
@@ -110,6 +112,10 @@ class SageTau2Agent(
         task_id: str = "",
         max_active_skills: int = 2,
         allow_provisional: bool = True,
+        delegates: list[AgentSpec] | None = None,
+        delegate_skills: list[Tau2Skill] | None = None,
+        max_delegated_turns: int = 8,
+        select_skills: bool = True,
     ):
         super().__init__(
             tools=tools,
@@ -121,6 +127,12 @@ class SageTau2Agent(
             llm=llm,
             llm_args=llm_args,
         )
+        self.delegates = list(delegates or [])
+        self.delegate_skills = list(delegate_skills or [])
+        self.max_delegated_turns = max(0, int(max_delegated_turns))
+        self.select_skills = select_skills
+        self._turn_skills: list[Tau2Skill] | None = None
+        self._auxiliary_calls: list[dict] = []
         self.skills = list(skills or [])
         self.injected_skill_ids = [s.skill_id for s in self.skills]
         self.organization_block = organization_block or ""
@@ -153,7 +165,7 @@ class SageTau2Agent(
         # routing rules, no catalog browsing.
         self.candidate_pool = list(candidate_pool or [])
         self.task_id = task_id
-        self.max_active_skills = max_active_skills
+        self.max_active_skills = max(0, int(max_active_skills))
         self.allow_provisional_skills = allow_provisional
         # Build the retrieval index from the candidate pool.
         self.skill_index: SkillIndex | None = (
@@ -175,6 +187,8 @@ class SageTau2Agent(
 
         Specialists keep assigned-skill ownership (no retrieval).
         """
+        if self._turn_skills is not None:
+            return format_skills_for_prompt(self._turn_skills)
         is_specialist = self.agent_role_name != EXECUTOR_NAME
         # Specialists keep assigned-skill ownership (no retrieval).
         if is_specialist or self.skill_index is None:
@@ -208,11 +222,13 @@ class SageTau2Agent(
                     context_parts.append(f"Agent called: {', '.join(names)}")
                 elif content:
                     context_parts.append(f"Agent: {content[:200]}")
-        context = "\n".join(context_parts[-6:])
+        from sage_tau2.contracts import observed_ledger
+        from sage_tau2.execution import execution_prompt
+        context = "\n".join(context_parts[-6:]) + "\n" + observed_ledger(dicts) + "\n" + execution_prompt(state.executions)
         if not context.strip():
             return ""
         query_prompt = (
-            "You are a skill retrieval assistant for a telecom customer service agent. "
+            f"You are a skill retrieval assistant for a {self.domain or 'customer service'} agent. "
             "Given the current conversation state, output a short query (1-2 sentences) "
             "describing what kind of protocol or skill would help the agent handle this "
             "request. Focus on: the user's problem, what tools need to be called, what "
@@ -228,6 +244,7 @@ class SageTau2Agent(
                 call_name="sage_tau2_skill_query",
                 **{k: v for k, v in self.llm_args.items() if k in ("temperature", "max_tokens", "top_p")},
             )
+            self._record_auxiliary_call("retrieval", raw)
             query = ""
             if hasattr(raw, "content") and raw.content:
                 query = str(raw.content).strip()
@@ -239,6 +256,10 @@ class SageTau2Agent(
         except Exception as exc:
             logger.warning(f"[sage_tau2] retrieval query generation failed: {exc}")
             return ""
+
+    def _record_auxiliary_call(self, kind: str, response: Any) -> None:
+        self._auxiliary_calls.append({"kind": kind, "cost": getattr(response, "cost", None),
+                                      "usage": getattr(response, "usage", None)})
 
     @property
     def system_prompt(self) -> str:
@@ -259,7 +280,10 @@ class SageTau2Agent(
         self, state: SageTau2StateType
     ) -> tuple[list[Any], str | None, dict[str, Any]]:
         """Fallback path: system + full chat (skills stay on a trailing user note)."""
+        from sage_tau2.execution import execution_prompt
         messages = list(state.system_messages) + list(state.messages)
+        if state.executions:
+            messages.append(UserMessage(role="user", content=execution_prompt(state.executions)))
         skills = self.skills_user_block
         if skills:
             messages = list(messages) + [
@@ -302,8 +326,9 @@ class SageTau2Agent(
             history_window=self.history_window,
             task_description=self.task_description,
         )
+        from sage_tau2.execution import execution_prompt
         user_content = append_skills_to_user_prompt(
-            window_prompt, self.skills_user_block
+            window_prompt + "\n" + execution_prompt(state.executions), self.skills_user_block
         )
         meta = dict(meta)
         meta["skills_on_user"] = bool(self.skills_user_block)
@@ -315,10 +340,16 @@ class SageTau2Agent(
     def generate_next_message(
         self, message: ValidAgentInputMessage, state: SageTau2StateType
     ) -> tuple[AssistantMessage, SageTau2StateType]:
+        self._auxiliary_calls = []
         if isinstance(message, MultiToolMessage):
             state.messages.extend(message.tool_messages)
         else:
             state.messages.append(message)
+
+        from sage_tau2.execution import (observe, apply_feedback, choose_execution, record_action,
+                                         execution_prompt, TERMINAL)
+        incoming = message.tool_messages if isinstance(message, MultiToolMessage) else [message]
+        observe(state.executions, [self._message_to_dict(m) for m in incoming], f"obs-{len(state.messages)}")
 
         # On-demand retrieval: before building the prompt, generate a
         # natural-language query from the current dialogue state and
@@ -342,7 +373,89 @@ class SageTau2Agent(
                 self.retrieved_skills = list(self.skills)
                 self._last_active_skills = list(self.skills)
 
+        from sage_tau2.coordination import TurnPlan, parse_plan, coordination_prompt
+        from sage_tau2.contracts import skill_events_from_messages
+        self._turn_skills = []
+        candidates = self.retrieved_skills if self.skill_index is not None else self.skills
+        pool = {s.skill_id: s for s in [*self.skills, *self.candidate_pool, *self.delegate_skills]}
+        ongoing = [pool[e['skill_id']] for e in state.executions if e['status'] not in TERMINAL and e['skill_id'] in pool]
+        candidates = list({s.skill_id: s for s in [*ongoing, *candidates]}.values()) if self.max_active_skills else []
+        cards, offered = render_skill_cards(candidates)
+        events = skill_events_from_messages([self._message_to_dict(m) for m in state.messages]) or []
+        delegated_turns = sum(e.get("actor") not in (None, EXECUTOR_NAME) for e in events)
+        from sage_tau2.skill_resolve import resolve_assigned_skills
+        delegates = [a for a in self.delegates if resolve_assigned_skills(a.assigned_skills, offered)] if delegated_turns < self.max_delegated_turns else []
+        actors = [AgentSpec(name=self.agent_role_name, role="owner", responsibilities=[]), *delegates]
+        plan = TurnPlan(actor=self.agent_role_name)
+        if self.select_skills and (offered or delegates):
+            context_messages, context, _ = self._llm_messages_and_window(state)
+            if not self.use_window_prompt:
+                context = json.dumps([self._message_to_dict(m) for m in context_messages], ensure_ascii=False, default=str)
+            try:
+                choice = generate(model=self.llm, tools=[], messages=[UserMessage(role="user", content=coordination_prompt(
+                    context=self.system_prompt + "\n" + (context or ""), cards=cards,
+                    agents=actors, owner=self.agent_role_name))], call_name="sage_tau2_coordinator",
+                    **{k: v for k, v in self.llm_args.items() if k in ("temperature", "max_tokens", "top_p")})
+                self._record_auxiliary_call("coordination", choice)
+                plan = parse_plan(choice.content or "", actors={a.name for a in actors},
+                                  skill_ids={sk.skill_id for sk in offered}, fallback=self.agent_role_name)
+            except Exception as exc:
+                logger.warning(f"[sage_tau2] coordinator fallback: {exc}")
+        elif not self.select_skills:
+            plan.adopted_skill_ids = [sk.skill_id for sk in offered][:self.max_active_skills]
+        chosen_delegate = next((a for a in delegates if a.name == plan.actor), None)
+        if chosen_delegate is not None:
+            from sage_tau2.skill_resolve import resolve_assigned_skills
+            owned_ids = {s.skill_id for s in resolve_assigned_skills(chosen_delegate.assigned_skills, offered)}
+            plan.adopted_skill_ids = [sid for sid in plan.adopted_skill_ids if sid in owned_ids]
+            if not plan.adopted_skill_ids:
+                plan = TurnPlan(actor=self.agent_role_name, reason="no_available_owned_skill")
+        apply_feedback(state.executions, plan.step_update)
+        previous = next((e for e in state.executions if e['execution_id'] == state.current_execution_id), None)
+        if plan.disposition in {'pause', 'abandon'}:
+            target = next((e for e in state.executions if e['execution_id'] == plan.execution_id), previous)
+            if target and target['status'] not in TERMINAL:
+                target['status'] = 'paused' if plan.disposition == 'pause' else 'abandoned'
+                target['return_record'] = {'status': target['status'], 'effect_verified': False, 'reason': plan.reason}
+            state.current_execution_id = ''
+            plan.adopted_skill_ids = []
+        elif not plan.adopted_skill_ids and previous and previous['status'] not in TERMINAL:
+            if previous['skill_id'] in {s.skill_id for s in offered}:
+                plan.adopted_skill_ids = [previous['skill_id']]
+                plan.execution_id = previous['execution_id']
+                plan.actor = previous['actor'] if previous['actor'] in {a.name for a in actors} else self.agent_role_name
+        if plan.execution_id and not plan.adopted_skill_ids and plan.disposition == 'continue':
+            requested = next((e for e in state.executions if e['execution_id'] == plan.execution_id and e['status'] not in TERMINAL), None)
+            if requested:
+                plan.adopted_skill_ids = [requested['skill_id']]
+        self._turn_skills = [sk for sk in offered if sk.skill_id in plan.adopted_skill_ids][:1]
+        selected_actor = next((a for a in delegates if a.name == plan.actor), None)
+        if selected_actor and not resolve_assigned_skills(selected_actor.assigned_skills, self._turn_skills):
+            plan.actor = self.agent_role_name
+        current = None
+        if self._turn_skills:
+            current = choose_execution(state.executions, skill=self._turn_skills[0], actor=plan.actor,
+                execution_id=plan.execution_id, objective=plan.subtask)
+            if current is None:
+                self._turn_skills = []
+            else:
+                state.current_execution_id = current['execution_id']
+        else:
+            state.current_execution_id = ''
+
         llm_messages, window_prompt, window_meta = self._llm_messages_and_window(state)
+        directive = (f"Active actor for this turn: {plan.actor}. Assigned subtask: {plan.subtask}. "
+                     f"Expected observable result: {plan.expected_result}. "
+                     "Execute only the next turn, then return control to Executor. "
+                     "Do not report an expected result as an observed fact.")
+        delegate = next((a for a in delegates if a.name == plan.actor), None)
+        if delegate is not None:
+            delegated_system = SYSTEM_PROMPT.format(
+                agent_instruction=instruction_for_agent(domain=self.domain, specialist=True),
+                domain_policy=self.domain_policy, role_block=_role_block_for(delegate), organization_block="")
+            llm_messages[0] = SystemMessage(role="system", content=delegated_system)
+        llm_messages.append(UserMessage(role="user", content=directive))
+        window_prompt = (window_prompt or "") + "\n\n" + directive
 
         def _produce(extra_messages: list[Any] | None = None) -> AssistantMessage:
             call_messages = list(llm_messages) + list(extra_messages or [])
@@ -397,6 +510,28 @@ class SageTau2Agent(
             raw = {}
         else:
             raw = dict(raw)
+        raw["sage_auxiliary_calls"] = list(self._auxiliary_calls)
+        costs = [c["cost"] for c in self._auxiliary_calls if isinstance(c.get("cost"), (int, float))]
+        if costs:
+            assistant_message.cost = float(assistant_message.cost or 0) + sum(costs)
+        usage = dict(assistant_message.usage or {})
+        for call in self._auxiliary_calls:
+            for key, value in (call.get("usage") or {}).items():
+                if isinstance(value, (int, float)) and isinstance(usage.get(key, 0), (int, float)):
+                    usage[key] = usage.get(key, 0) + value
+        if usage:
+            assistant_message.usage = usage
+        from copy import deepcopy
+        call_ownership = record_action(current, self._message_to_dict(assistant_message))
+        raw["sage_skill_event"] = {
+            "version": 2, "execution_id": current['execution_id'] if current else None,
+            "call_ownership": call_ownership, "executions": deepcopy(state.executions),
+            "actor": plan.actor, "owner": self.agent_role_name,
+            "offered_skill_ids": [sk.skill_id for sk in offered],
+            "adopted_skill_ids": [sk.skill_id for sk in self._turn_skills],
+            "subtask": plan.subtask, "expected_result": plan.expected_result,
+            "reason": plan.reason, "tool_calls": self._message_to_dict(assistant_message).get("tool_calls") or [],
+        }
         if self.retrieved_skills:
             raw["sage_retrieved_skill_ids"] = [s.skill_id for s in self.retrieved_skills]
             raw["sage_retrieved_skill_names"] = [s.skill_name for s in self.retrieved_skills]
@@ -546,13 +681,18 @@ def _skills_for_primary(
     ):
         if not skill.action_protocol:
             continue
+        if allowed_skill_ids is not None and skill.skill_id not in allowed_skill_ids:
+            continue
+        from sage_tau2.credit import skill_allowed_for_inject
+        if not skill_allowed_for_inject(skill, allow_provisional=allow_provisional):
+            continue
         # Extra safety: never hand a specialist a cross-domain protocol.
         if same_domain_only:
             skill_domain = str(getattr(skill, "domain", "") or "").lower()
             if skill_domain and skill_domain != str(domain or "").lower():
                 continue
         out.append(skill)
-    return out
+    return out[:max(0, max_inject)]
 
 
 def _parse_allowed_skill_ids(raw: Any) -> set[str] | None:
@@ -560,7 +700,7 @@ def _parse_allowed_skill_ids(raw: Any) -> set[str] | None:
         return None
     if isinstance(raw, (set, list, tuple)):
         out = {str(x) for x in raw if str(x).strip()}
-        return out or None
+        return out
     text = str(raw).strip()
     if not text:
         return None
@@ -573,7 +713,7 @@ def _parse_allowed_skill_ids(raw: Any) -> set[str] | None:
             parsed = None
         if isinstance(parsed, list):
             out = {str(x) for x in parsed if str(x).strip()}
-            return out or None
+            return out
     out = {part.strip() for part in text.split(",") if part.strip()}
     return out or None
 
@@ -594,7 +734,7 @@ def _role_block_for(agent: AgentSpec) -> str:
             "assigned_skill_names: " + ", ".join(agent.assigned_skills[:12])
         )
     lines.append(
-        "Execute end-to-end in this specialist role. Do not hand off mid-episode."
+        "Execute the assigned objective using observed evidence. Return actual results and unresolved work to Executor after this turn."
     )
     lines.append("</active_specialist>")
     return "\n".join(lines)
@@ -661,6 +801,10 @@ def create_sage_tau2_agent(tools, domain_policy, **kwargs):
     )
     prior_hints_path = str(prior_hints_path or "").strip()
 
+    enable_delegation = str(_pop_llm_arg(kwargs, "enable_delegation", True)).lower() not in {"0", "false", "no"}
+    max_delegated_turns = int(_pop_llm_arg(kwargs, "max_delegated_turns", 8))
+    select_skills = str(_pop_llm_arg(kwargs, "select_skills", True)).lower() not in {"0", "false", "no"}
+    fixed_skill_ids = _pop_llm_arg(kwargs, "fixed_skill_ids", None)
     # Remaining llm_args are for the LLM call itself.
     llm = kwargs.get("llm")
     llm_args = dict(kwargs.get("llm_args") or {})
@@ -701,6 +845,9 @@ def create_sage_tau2_agent(tools, domain_policy, **kwargs):
             dispatch_layer="force_primary",
             evidence={"force_primary": force_primary, "task_id": task_id},
         )
+    elif enable_delegation and dispatch_cfg.enabled:
+        primary = org.executor()
+        assignment = AgentAssignment(primary_agent=primary.name, dispatch_layer="executor_coordinator")
     else:
         dispatcher = ExecutorDispatcher(config=dispatch_cfg, backend=None)
         assignment = dispatcher.assign(
@@ -740,12 +887,14 @@ def create_sage_tau2_agent(tools, domain_policy, **kwargs):
         task_text=str(task_text or ""),
         require_scope_match=require_scope_match,
     )
+    if fixed_skill_ids is not None:
+        injected = [sk for sk in skills if sk.skill_id in set(fixed_skill_ids)][:max_skills]
     is_specialist = primary.name != EXECUTOR_NAME
 
     # Build the full candidate pool for step-level retrieval (Executor only).
     # Specialists keep assigned-skill ownership; no per-step gate needed.
     executor_candidate_pool: list[Tau2Skill] = []
-    if not is_specialist and bank is not None:
+    if max_skills > 0 and not is_specialist and bank is not None and fixed_skill_ids is None:
         # Step-level retrieval: search the full injectable domain pool.
         # Pre-filtering with skill_matches_episode here would bypass BM25
         # retrieval and often leave pool=0 when scope gates are strict.
@@ -781,6 +930,22 @@ def create_sage_tau2_agent(tools, domain_policy, **kwargs):
         # Prepend to task_description so it enters the system prompt's task line.
         prompt_task = f"{prior_hint}\n\n{prompt_task}"
 
+    delegates = []
+    delegate_skills = []
+    if max_skills > 0 and enable_delegation and dispatch_cfg.enabled and not force_primary and primary.name == EXECUTOR_NAME:
+        gate = ExecutorDispatcher(config=dispatch_cfg)
+        for candidate in agents:
+            if candidate.name == EXECUTOR_NAME or not gate._is_dispatchable(candidate, primary):
+                continue
+            # Unproven legacy specialists cannot bypass the paired admission gate.
+            if not (candidate.shadow_evaluation_record or {}).get("same_skill_probe_passed"):
+                continue
+            owned = _skills_for_primary(primary=candidate, bank=bank, max_inject=max_skills,
+                allow_provisional=allow_provisional, domain=domain, same_domain_only=True,
+                allowed_skill_ids=allowed_skill_ids, require_scope_match=False)
+            if owned:
+                delegates.append(candidate)
+                delegate_skills.extend(owned)
     agent = SageTau2Agent(
         tools=tools,
         domain_policy=domain_policy,
@@ -797,6 +962,8 @@ def create_sage_tau2_agent(tools, domain_policy, **kwargs):
         task_id=str(task_id or ""),
         max_active_skills=max_skills,
         allow_provisional=allow_provisional,
+        delegates=delegates, delegate_skills=delegate_skills,
+        max_delegated_turns=max_delegated_turns, select_skills=select_skills,
     )
     skills_block = format_skills_for_prompt(injected, specialist=is_specialist)
 

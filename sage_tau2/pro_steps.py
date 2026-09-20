@@ -54,6 +54,15 @@ _FULL_TOOL_CHARS = 8000
 # Keep actionable ids (reservations / payment_methods) early so short history
 # clips do not truncate mid-id (e.g. gift_card_8190333 → gift_card_819).
 _PRIORITY_KEYS = (
+    "phone_number",
+    "line_id",
+    "customer_id",
+    "data_used_gb",
+    "data_limit_gb",
+    "data_refueling_gb",
+    "roaming_enabled",
+    "contract_end_date",
+    "suspension_start_date",
     "reservation_id",
     "user_id",
     "order_id",
@@ -590,13 +599,9 @@ def semantic_summarize_json(
                 bits.append(_format_compact_dict(key, val))
                 seen.add(key)
             elif isinstance(val, (str, int, float, bool)):
-                if (
-                    key.endswith("_id")
-                    or key in _KEEP_SCALARS
-                    or key in _PRIORITY_KEYS
-                ):
-                    bits.append(f"{key}={val}")
-                    seen.add(key)
+                # Unknown scalar fields can be decision-critical in new domains.
+                bits.append(f"{key}={val}")
+                seen.add(key)
             if len(bits) >= 10:
                 break
         # Deferred blobs only if still under budget.
@@ -1161,6 +1166,10 @@ def build_live_window_prompt(
         "booking_scratchpad": booking_scratchpad,
         "task_description": task_description or "",
     }
+    from sage_tau2.contracts import observed_ledger
+    ledger = observed_ledger(messages)
+    if ledger:
+        prompt += "\n\n" + ledger
     return prompt, meta
 
 
@@ -1324,6 +1333,13 @@ def messages_to_rich_pro_steps(
             "step_count": step_count,
             "obs_mode": mode,
         }
+        from sage_tau2.contracts import interaction_sequence
+        step["interaction_sequence"] = interaction_sequence([msg, *obs_msgs])
+        step["tool_results"] = [dict(m) for m in obs_msgs if m.get("role") == "tool"]
+        raw_data = msg.get("raw_data")
+        raw_event = raw_data.get("sage_skill_event") if isinstance(raw_data, dict) else None
+        if isinstance(raw_event, dict):
+            step["skill_event"] = raw_event
         if reply:
             step["agent_messages"] = [{"content": reply}]
         if store_window_prompt:

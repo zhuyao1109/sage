@@ -123,6 +123,9 @@ class OnlineConfig:
     require_scope_match: bool = True
     # false = no ExecutorDispatcher / meta routing (force Executor).
     enable_executor_dispatch: bool = True
+    enable_delegation: bool = True
+    max_delegated_turns: int = 8
+    select_skills: bool = True
     probation_primary_quota: int = 0
     # Optional fixed task list (overrides train sampling for this run).
     task_ids: list[str] | None = None
@@ -207,6 +210,9 @@ def _run_segment_collection(
     force_primary: str | None = None,
     require_scope_match: bool = True,
     enable_executor_dispatch: bool = True,
+    enable_delegation: bool = True,
+    max_delegated_turns: int = 8,
+    select_skills: bool = True,
     prior_failure_hints_path: Path | None = None,
 ) -> dict[str, Any]:
     from tau2.data_model.simulation import TextRunConfig
@@ -242,6 +248,9 @@ def _run_segment_collection(
         "inject_same_domain_only": True,
         "require_scope_match": require_scope_match,
         "enable_executor_dispatch": bool(enable_executor_dispatch),
+        "enable_delegation": bool(enable_delegation),
+        "max_delegated_turns": int(max_delegated_turns),
+        "select_skills": bool(select_skills),
         "dispatch_log_path": str(dispatch_log),
     }
     if organization_path is not None:
@@ -389,6 +398,9 @@ def retry_write_gold_fails(
     force_primary: str | None = "Executor",
     require_scope_match: bool = True,
     enable_executor_dispatch: bool = True,
+    enable_delegation: bool = True,
+    max_delegated_turns: int = 8,
+    select_skills: bool = True,
     verdict_feedback: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Re-collect write-gold fails up to ``retry_k`` rounds; keep best sim per task.
@@ -455,6 +467,9 @@ def retry_write_gold_fails(
             force_primary=force,
             require_scope_match=require_scope_match,
             enable_executor_dispatch=enable_executor_dispatch,
+            enable_delegation=enable_delegation,
+            max_delegated_turns=max_delegated_turns,
+            select_skills=select_skills,
             prior_failure_hints_path=hints_path,
         )
         retry_dir = seg_dir / f"write_retry_{attempt:02d}"
@@ -749,6 +764,9 @@ def run_online(config: OnlineConfig, output_root: str | Path) -> dict[str, Any]:
             task_split_name=config.task_split_name,
             require_scope_match=config.require_scope_match,
             enable_executor_dispatch=config.enable_executor_dispatch,
+                enable_delegation=config.enable_delegation,
+                max_delegated_turns=config.max_delegated_turns,
+                select_skills=config.select_skills,
         )
         write_json(seg_dir / "raw_results_initial.json", results_payload)
 
@@ -775,6 +793,9 @@ def run_online(config: OnlineConfig, output_root: str | Path) -> dict[str, Any]:
                 ),
                 require_scope_match=config.require_scope_match,
                 enable_executor_dispatch=config.enable_executor_dispatch,
+                enable_delegation=config.enable_delegation,
+                max_delegated_turns=config.max_delegated_turns,
+                select_skills=config.select_skills,
                 verdict_feedback=bool(config.retry_verdict_feedback),
             )
             write_json(seg_dir / "write_retry_summary.json", retry_log)
@@ -817,6 +838,8 @@ def run_online(config: OnlineConfig, output_root: str | Path) -> dict[str, Any]:
                 max_concurrency=max(1, min(4, int(config.max_concurrency))),
                 agent_name=config.agent_name,
                 probe_dir=seg_dir / "admission_probes",
+                excluded_task_ids=val_ids,
+                task_split_name=config.task_split_name,
             )
         summary = update_bank_from_results(
             results_payload=results_payload,
@@ -860,6 +883,9 @@ def run_online(config: OnlineConfig, output_root: str | Path) -> dict[str, Any]:
                 task_split_name=config.val_split_name,
                 require_scope_match=config.require_scope_match,
                 enable_executor_dispatch=config.enable_executor_dispatch,
+                enable_delegation=config.enable_delegation,
+                max_delegated_turns=config.max_delegated_turns,
+                select_skills=config.select_skills,
             )
             write_json(val_dir / "raw_results.json", val_payload)
             val_summary = _reward_stats(val_payload)

@@ -93,17 +93,12 @@ def bug_tags_from_task_id(task_id: str) -> list[str]:
 
 
 def normalize_bug_tag(tag: str) -> str:
-    """Collapse near-equivalent telecom bug tags for inject gating.
-
-    Distill evidence often sees ``user_abroad_roaming_enabled_off`` while a
-    later episode uses ``user_abroad_roaming_disabled_on`` — both are abroad
-    roaming root-causes and should share the same skill activation family.
-    """
+    """Normalize aliases while preserving distinct roaming state conditions."""
     t = str(tag or "").strip().lower()
     if not t:
         return ""
     if t.startswith("user_abroad_roaming_"):
-        return "user_abroad_roaming_*"
+        return t
     if t in {
         "break_app_sms_permission",
         "break_app_storage_permission",
@@ -770,6 +765,9 @@ def _bug_signature_gate_allows(skill: Any, meta: dict[str, Any], task_id: str) -
     # flags must hint the skill's own write tool (e.g. a roaming flag for
     # enable_roaming, data_usage_exceeded for refuel_data). Sharing an
     # unrelated bug family (airplane_mode_on) is not enough.
+    # Explicit activation evidence is a constraint, not a hint to widen.
+    if inter_n and not inter_n <= ep_n:
+        return False
     write = skill_write_name(skill)
     if write and write in hinted_agent_writes_from_task_id(task_id):
         return True

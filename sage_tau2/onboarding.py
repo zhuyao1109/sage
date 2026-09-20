@@ -253,3 +253,51 @@ def refresh_acting_statuses(
 
 def write_onboarding_report(path: str | Path, report: dict[str, Any]) -> None:
     write_json(path, report)
+
+
+def refresh_delegated_statuses(organization, trajectories, skills, *, policy=None):
+    """Track verified local subtask outcomes separately from whole-task wins."""
+    from sage_tau2.contracts import local_skill_outcome
+    pol = policy or OnboardingPolicy()
+    bank = {s.skill_id: s for s in skills}
+    decisions = []
+    for agent in organization.agents:
+        if agent.name == EXECUTOR_NAME:
+            continue
+        record = dict(agent.shadow_evaluation_record or {})
+        played = wins = unknown = 0
+        for traj in trajectories:
+            if "infrastructure" in str(traj.termination_reason or "").lower():
+                continue
+            events = [e for e in traj.metadata.get("skill_events", []) or [] if e.get("actor") == agent.name]
+            if not events:
+                continue
+            ids = {sid for e in events for sid in e.get("adopted_skill_ids", [])}
+            outcomes = [local_skill_outcome(bank[sid], traj, events)['success'] for sid in ids if sid in bank]
+            if not outcomes or any(value is None for value in outcomes) and not any(value is False for value in outcomes):
+                unknown += 1
+                continue
+            played += 1
+            wins += int(all(value is True for value in outcomes))
+        if not (played or unknown):
+            continue
+        record['delegated_verified_games'] = int(record.get('delegated_verified_games') or 0) + played
+        record['delegated_local_wins'] = int(record.get('delegated_local_wins') or 0) + wins
+        record['delegated_unverified_games'] = int(record.get('delegated_unverified_games') or 0) + unknown
+        decision = 'continue_probation'
+        if acting_status(agent) == 'probation' and record.get('same_skill_probe_passed'):
+            if record['delegated_verified_games'] >= pol.min_games and record['delegated_local_wins'] >= pol.min_wins:
+                agent.acting_status = 'accepted'
+                record['acting_status'] = 'accepted'
+                decision = 'accepted'
+            elif played and record['delegated_verified_games'] >= pol.min_games and record['delegated_local_wins'] < pol.min_wins:
+                record['delegated_rejected_windows'] = int(record.get('delegated_rejected_windows') or 0) + 1
+                if record['delegated_rejected_windows'] >= pol.remove_after_rejected_windows:
+                    agent.acting_status = 'dormant'
+                    record['acting_status'] = 'dormant'
+                    decision = 'dormant'
+        record['last_delegated_onboarding_decision'] = decision
+        agent.shadow_evaluation_record = record
+        decisions.append({'agent': agent.name, 'decision': decision, 'played': played,
+                          'local_wins': wins, 'unverified': unknown, 'mode': 'delegated_subtasks'})
+    return decisions

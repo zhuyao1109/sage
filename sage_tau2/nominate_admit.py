@@ -374,6 +374,10 @@ def apply_admission(
         record = dict(specialist.shadow_evaluation_record or {})
         record["nominate_admit_awaiting_admission"] = False
         record["last_nominate_admit"] = dict(result)
+        record["same_skill_probe_passed"] = (
+            mode == "spec_vs_exec" and
+            (result.get("probe") or {}).get("comparison") == "same_skills_same_model_same_turn_budget"
+        )
         record["trial_games_remaining"] = int(adm.online_trial_games)
         if mode == "editor_commit":
             record["promotion_probe_passed"] = False

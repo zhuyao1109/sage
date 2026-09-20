@@ -110,6 +110,9 @@ class MultiDomainConfig:
     remove_after_rejected_windows: int = 2
     # Evolve: only accepted specialists take primary (probation shadow/quota off).
     probation_primary_quota: int = 0
+    enable_delegation: bool = True
+    max_delegated_turns: int = 8
+    select_skills: bool = True
     llm_config_path: str | None = None
     agent_name: str = "sage_tau2"
 
@@ -170,6 +173,9 @@ def _run_domain_collection(
     agent_name: str,
     task_split_name: str,
     probation_primary_quota: int = 0,
+    enable_delegation: bool = True,
+    max_delegated_turns: int = 8,
+    select_skills: bool = True,
     inject_same_domain_only: bool = True,
     allowed_skill_ids: set[str] | None = None,
 ) -> dict[str, Any]:
@@ -205,6 +211,9 @@ def _run_domain_collection(
         "inject_provisional": allow_provisional_inject,
         "inject_same_domain_only": inject_same_domain_only,
         "enable_executor_dispatch": True,
+        "enable_delegation": bool(enable_delegation),
+        "max_delegated_turns": int(max_delegated_turns),
+        "select_skills": bool(select_skills),
         "dispatch_log_path": str(dispatch_log),
         "dispatch_config": {
             "require_accepted_for_primary": True,
@@ -546,6 +555,9 @@ def run_multidomain(
                 agent_name=config.agent_name,
                 task_split_name=config.task_split_name,
                 probation_primary_quota=int(config.probation_primary_quota),
+                    enable_delegation=config.enable_delegation,
+                    max_delegated_turns=config.max_delegated_turns,
+                    select_skills=config.select_skills,
                 inject_same_domain_only=config.inject_same_domain_only,
                 allowed_skill_ids=inject_skill_ids,
             )
@@ -640,6 +652,8 @@ def run_multidomain(
                         max_concurrency=max(1, min(2, int(config.max_concurrency))),
                         agent_name=config.agent_name,
                         probe_dir=seg_dir / "admission_probes",
+                excluded_task_ids=val_map.get(domain, []),
+                        task_split_name=config.task_split_name,
                     )
                 summary = update_bank_from_results(
                     results_payload=payload,
@@ -717,6 +731,9 @@ def run_multidomain(
                     agent_name=config.agent_name,
                     task_split_name=config.val_split_name,
                     probation_primary_quota=int(config.probation_primary_quota),
+                    enable_delegation=config.enable_delegation,
+                    max_delegated_turns=config.max_delegated_turns,
+                    select_skills=config.select_skills,
                     inject_same_domain_only=config.inject_same_domain_only,
                     allowed_skill_ids=inject_skill_ids,
                 )

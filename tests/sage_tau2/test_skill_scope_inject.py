@@ -104,7 +104,7 @@ class SkillScopeMatchTests(unittest.TestCase):
             )
         )
 
-    def test_roaming_variant_gate_activates_abroad_skill(self) -> None:
+    def test_roaming_variant_gate_does_not_merge_different_conditions(self) -> None:
         """Evidence used enabled_off; episode uses disabled_on + sibling bugs."""
         skill = Tau2Skill(
             skill_name="mms issue abroad skill",
@@ -147,7 +147,7 @@ class SkillScopeMatchTests(unittest.TestCase):
             "[mms_issue]break_apn_mms_setting|break_app_storage_permission|"
             "unseat_sim_card|user_abroad_roaming_disabled_on[PERSONA:None]"
         )
-        self.assertTrue(
+        self.assertFalse(
             skill_matches_episode(
                 skill,
                 domain="telecom",

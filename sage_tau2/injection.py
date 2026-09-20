@@ -80,89 +80,55 @@ def format_skills_for_prompt_legacy(
     return text
 
 
-def format_skills_for_prompt(
-    skills: list[Tau2Skill],
-    *,
-    max_chars: int = 3500,
-    specialist: bool = False,
-    layered: bool = True,
-) -> str:
-    """ALFWorld / sage_mas-style skill patch for the **user** window.
+def render_skill_cards(skills: list[Tau2Skill], *, max_chars: int = 6000) -> tuple[str, list[Tau2Skill]]:
+    """Pack complete ordered cards. Omitted cards are not recorded as injected."""
+    from sage_tau2.contracts import contract_for_skill
 
-    Emits an ordered protocol card from the injected skill (agent tools then
-    guide-user steps). All content is pipeline-distilled — no hand-coded
-    Must-do filters, no hand-coded task-family policies, no global footer
-    with expert strategies. The skill protocol speaks for itself.
-
-    Returns empty string when there are no skills (do not append a stub).
-    """
-    if not layered:
-        return format_skills_for_prompt_legacy(
-            skills, max_chars=max_chars, specialist=specialist
-        )
-    if not skills:
-        return ""
-    header = (
-        "Active skill patch:"
-        if specialist
-        else "Active skill patch (follow concrete steps; do not invent entities):"
+    header = "Available learned skills (candidates, not mandatory actions):"
+    footer = (
+        "Check applicability using current evidence before adopting a skill. "
+        "Preserve dependencies across tools and user actions. Bind identifiers from "
+        "observed results; never guess. Verify outcomes before declaring completion; "
+        "return unresolved work to Executor. Domain policy takes precedence."
     )
-    lines = [header]
+    cards: list[str] = []
+    offered: list[Tau2Skill] = []
     seen: set[str] = set()
+    used = len(header) + len(footer) + 2
     for skill in skills:
-        name = str(skill.skill_name or skill.skill_id or "skill")
-        if name in seen:
+        if skill.skill_id in seen:
             continue
-        seen.add(name)
-        cleaned = strip_user_side_protocol_steps(
-            list(skill.action_protocol or []),
-            domain=getattr(skill, "domain", None),
-        )
-        agent_steps, guide_steps = _ordered_protocol_lines(cleaned)
-        credit = skill.metadata.get("skill_credit") or {}
-        score = credit.get("score", skill.metadata.get("utility"))
-        meta = skill.metadata or {}
-        lines.append(f"- {name}")
-        if skill.precondition:
-            lines.append(f"  Precondition: {skill.precondition}")
-        if agent_steps:
-            lines.append("  Required agent tools (in order):")
-            for i, step in enumerate(agent_steps, start=1):
-                lines.append(f"    {i}. {step}")
-        if guide_steps:
-            lines.append(
-                "  Required user guides (ask user; never call as agent tools):"
-            )
-            for i, step in enumerate(guide_steps, start=1):
-                lines.append(f"    {i}. {step}")
-        if not agent_steps and not guide_steps:
-            lines.append("  Protocol (follow this full card): (empty)")
-        purpose = meta.get("agent_tool_protocol_purpose")
-        if purpose:
-            lines.append(f"  Note: {purpose}")
-        gates = meta.get("dialogue_gates") or []
-        inlined = bool(meta.get("inline_dialogue_in_protocol", False))
-        if isinstance(gates, list) and gates and not inlined:
-            lines.append("  Dialogue gates: " + " | ".join(str(g) for g in gates[:4]))
-        hints = meta.get("user_side_hints") or []
-        if isinstance(hints, list) and hints:
-            lines.append(
-                "  User-side hints (guide user; never call as tools): "
-                + " | ".join(str(h) for h in hints[:6])
-            )
-        if skill.expected_effect:
-            lines.append(f"  Expected effect: {skill.expected_effect}")
-        if score is not None:
-            lines.append(f"  status={skill.status.value} score={score}")
-    lines.append(
-        "Follow the injected card in order. "
-        "Device/phone steps are never agent tools — guide the user. "
-        "Obey domain policy; one tool call XOR one user message per turn."
-    )
-    text = "\n".join(lines)
-    if len(text) > max_chars:
-        return text[: max_chars - 20] + "\n...(truncated)"
-    return text
+        seen.add(skill.skill_id)
+        contract = contract_for_skill(skill)
+        lines = [f"Skill {skill.skill_id}: {skill.skill_name}",
+                 f"Use when: {contract['condition']}",
+                 "Protocol (preserve this order, including user actions):"]
+        if contract['observed_conditions']:
+            lines.insert(2, 'Observed supporting conditions (check now; not proven causal): ' + '; '.join(contract['observed_conditions']))
+        if contract['bindings']:
+            lines.insert(2, "Bind from observed sources: " + "; ".join(
+                f"{key} <- {' / '.join(sources)}" for key, sources in contract['bindings'].items()))
+        protocol = strip_user_side_protocol_steps(skill.action_protocol, domain=skill.domain)
+        lines.extend(f"  {i}. {step}" for i, step in enumerate(protocol, 1))
+        lines.append("Verify: " + contract["verification"])
+        lines.append("Stop/return: " + contract["stop_condition"])
+        card = "\n".join(lines)
+        if used + len(card) + 2 > max_chars:
+            continue
+        cards.append(card)
+        offered.append(skill)
+        used += len(card) + 2
+    if not cards:
+        return "", []
+    return "\n\n".join([header, *cards, footer]), offered
+
+
+def format_skills_for_prompt(
+    skills: list[Tau2Skill], *, max_chars: int = 6000,
+    specialist: bool = False, layered: bool = True,
+) -> str:
+    # Keep the call signature for older runners; all modes now preserve order.
+    return render_skill_cards(skills, max_chars=max_chars)[0]
 
 
 def append_skills_to_user_prompt(user_prompt: str, skills_block: str) -> str:

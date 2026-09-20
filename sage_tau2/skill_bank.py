@@ -117,6 +117,16 @@ class Tau2SkillBank:
         old_proto = list(existing.action_protocol or [])
         if not new_proto:
             return False
+        old_contract = (existing.metadata or {}).get("execution_contract") or {}
+        new_contract = (incoming.metadata or {}).get("execution_contract") or {}
+        if old_contract.get("version", 0) >= 2:
+            # A shorter trace is not proof that a dependency is optional.
+            return False
+        if new_contract.get("version", 0) >= 2:
+            existing.action_protocol = new_proto
+            existing.metadata["execution_contract"] = new_contract
+            existing.metadata["agent_tool_protocol"] = incoming.metadata.get("agent_tool_protocol", new_proto)
+            return True
         if not old_proto or self._protocol_quality_score(new_proto) < self._protocol_quality_score(
             old_proto
         ):
@@ -175,6 +185,16 @@ class Tau2SkillBank:
             if existing.status in {SkillStatus.REJECTED, SkillStatus.RETIRED}:
                 continue
             existing_proto = _agent_proto(existing)
+            if existing.domain != skill.domain:
+                continue
+            new_v = ((skill.metadata or {}).get("execution_contract") or {}).get("version", 0)
+            old_v = ((existing.metadata or {}).get("execution_contract") or {}).get("version", 0)
+            if new_v >= 2 or old_v >= 2:
+                # Ordered cross-role steps and parameter settings define the
+                # learned contract; a shared write name alone does not.
+                if existing.action_protocol == skill.action_protocol:
+                    return existing
+                continue
             if existing_proto == proto and proto:
                 return existing
             if (

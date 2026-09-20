@@ -390,7 +390,9 @@ def update_bank_from_results(
             injected_by_task = _load_injected_ids_by_task(dispatch_journal)
         for traj in trajectories:
             ep_injected: list[str] | None = list(injected_skill_ids or [])
-            if bool(cfg.credit_per_episode_inject):
+            if traj.metadata.get("skill_events") is not None:
+                ep_injected = sorted({sid for event in traj.metadata["skill_events"] for sid in event.get("adopted_skill_ids", [])})
+            elif bool(cfg.credit_per_episode_inject):
                 tid = str(getattr(traj, "task_id", "") or "")
                 if tid in injected_by_task:
                     ep_injected = injected_by_task[tid]
@@ -493,6 +495,14 @@ def update_bank_from_results(
                     ),
                 ),
             )
+            from sage_tau2.onboarding import refresh_delegated_statuses
+            delegated = refresh_delegated_statuses(organization, trajectories, bank.skills,
+                policy=OnboardingPolicy(min_games=int(cfg.probation_min_games),
+                    min_wins=int(cfg.probation_min_wins),
+                    remove_after_rejected_windows=int(cfg.remove_after_rejected_windows)))
+            onboarding_report["delegated_decisions"] = delegated
+            onboarding_report["n_promoted"] += sum(d["decision"] == "accepted" for d in delegated)
+            onboarding_report["n_dormant"] += sum(d["decision"] == "dormant" for d in delegated)
             organization.save(org_path)
 
             na_cfg = NominateAdmitConfig()

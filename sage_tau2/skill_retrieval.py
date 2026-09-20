@@ -51,6 +51,8 @@ def build_skill_document(skill: Tau2Skill) -> str:
             parts.extend(str(v) for v in val if v)
         elif val:
             parts.append(str(val))
+    contract = meta.get("execution_contract") or {}
+    parts.extend(str(contract.get(key) or '') for key in ('condition', 'observed_conditions', 'bindings', 'verification'))
     return " ".join(parts)
 
 

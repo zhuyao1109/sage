@@ -232,7 +232,7 @@ class TelecomToolSideSmokeTests(unittest.TestCase):
         self.assertIn("enable_roaming", text)
         self.assertNotIn("toggle_airplane_mode", text)
         self.assertNotIn("run_speed_test", text)
-        self.assertIn("Device/phone steps are never agent tools", text)
+        self.assertIn("user actions", text)
         # Agent prompt lives in prompts.py (avoid importing tau2 via agent).
         prompt_src = (
             Path(__file__).resolve().parents[2] / "sage_tau2" / "prompts.py"

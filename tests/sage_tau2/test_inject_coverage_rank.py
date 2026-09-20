@@ -184,13 +184,13 @@ class RequiredCardFormatTests(unittest.TestCase):
             ],
         )
         text = format_skills_for_prompt([skill])
-        self.assertIn("Required agent tools (in order):", text)
+        self.assertIn("Protocol (preserve this order, including user actions):", text)
         self.assertIn("1. get_customer_by_phone", text)
         self.assertIn("2. refuel_data", text)
-        self.assertIn("Must-do agent writes", text)
-        self.assertIn("Required user guides", text)
+        self.assertIn("candidates, not mandatory actions", text)
+        self.assertIn("3. guide user: toggle_data", text)
         self.assertIn("guide user: toggle_data", text)
-        self.assertIn("before transfer_to_human_agents", text)
+        self.assertIn("Verify:", text)
         self.assertNotIn("Protocol (follow this full card):", text)
 
 

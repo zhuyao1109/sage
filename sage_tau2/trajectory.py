@@ -140,7 +140,7 @@ def extract_tool_steps(messages: list[dict[str, Any]]) -> list[ToolCallStep]:
         if not isinstance(msg, dict):
             continue
         if msg.get("role") == "tool":
-            call_id = str(msg.get("id") or msg.get("tool_call_id") or "")
+            call_id = str(msg.get("tool_call_id") or msg.get("id") or "")
             if call_id:
                 by_id[call_id] = msg
 
@@ -217,6 +217,7 @@ def simulation_to_trajectory(
         db_match = bool(db_match)
     from sage_tau2.success_mode import classify_success_mode
 
+    from sage_tau2.contracts import skill_events_from_messages, interaction_sequence
     mode_info = classify_success_mode(sim)
     return Tau2Trajectory(
         task_id=str(sim.get("task_id") or (task or {}).get("id") or ""),
@@ -250,6 +251,8 @@ def simulation_to_trajectory(
         evidence_id=str(sim.get("id") or uuid4()),
         raw_messages=messages,
         metadata={
+            "skill_events": skill_events_from_messages(messages),
+            "interaction_sequence": interaction_sequence(messages),
             "seed": sim.get("seed"),
             "duration": sim.get("duration"),
             "action_checks": reward_info.get("action_checks"),

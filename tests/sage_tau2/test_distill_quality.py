@@ -193,7 +193,7 @@ class DistillQualityTests(unittest.TestCase):
                 "enable_roaming(customer_id=?, line_id=?)",
             ]
         )
-        self.assertIn("<customer_id_from_prior_lookup", bound[1])
+        self.assertIn("<entity_id_from_prior_tool_result", bound[1])
         self.assertTrue(
             any("disconnect_vpn" in h for h in user_side_hints_from_trajs([traj]))
         )

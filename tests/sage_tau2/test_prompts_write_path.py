@@ -23,7 +23,7 @@ class PromptWritePathTests(unittest.TestCase):
     def test_executor_keeps_env_contract_only(self) -> None:
         text = EXECUTOR_INSTRUCTION.lower()
         self.assertIn("only call tools from your agent toolkit", text)
-        self.assertIn("active skill patch", text)
+        self.assertIn("learned skills are candidates", text)
         self.assertIn("domain <policy> is binding", text)
         # No hand-written escalate / confirm-before-write recipes.
         self.assertNotIn("genuine attempt to resolve", text)
@@ -83,25 +83,24 @@ class PromptWritePathTests(unittest.TestCase):
             domain="telecom",
         )
         text = format_skills_for_prompt([skill])
-        self.assertIn("Active skill patch", text)
-        self.assertIn("- enable roaming skill (n=2)", text)
-        self.assertIn("Required agent tools (in order):", text)
+        self.assertIn("Available learned skills", text)
+        self.assertIn("enable roaming skill (n=2)", text)
+        self.assertIn("Protocol (preserve this order, including user actions):", text)
         self.assertIn("enable_roaming", text)
         self.assertNotIn("<available_skills>", text)
         self.assertNotIn("confirm before writes", text)
         self.assertEqual(format_skills_for_prompt([]), "")
         joined = append_skills_to_user_prompt("WINDOW", text)
-        self.assertTrue(joined.startswith("WINDOW\n\nActive skill patch"))
+        self.assertTrue(joined.startswith("WINDOW\n\nAvailable learned skills"))
 
         skill.metadata["dialogue_gates"] = ["confirm before enable_roaming"]
         skill.metadata["user_side_hints"] = ["user: turn airplane mode OFF"]
         skill.metadata["inline_dialogue_in_protocol"] = False
         layered = format_skills_for_prompt([skill])
-        self.assertIn("Dialogue gates:", layered)
-        self.assertIn("User-side hints", layered)
+        self.assertNotIn("Dialogue gates:", layered)
+        self.assertIn("Use when: user abroad", layered)
         legacy = format_skills_for_prompt([skill], layered=False)
-        self.assertIn("Protocol:", legacy)
-        self.assertNotIn("Required agent tools (in order):", legacy)
+        self.assertEqual(layered, legacy)
 
 if __name__ == "__main__":
     unittest.main()

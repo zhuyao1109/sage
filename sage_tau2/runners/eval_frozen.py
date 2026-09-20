@@ -55,6 +55,7 @@ def _run_domain_eval(
     agent_name: str,
     task_split_name: str,
     executor_only: bool = False,
+    executor_with_skills: bool = False,
     accepted_only: bool = False,
 ) -> dict[str, Any]:
     from tau2.data_model.simulation import TextRunConfig
@@ -67,11 +68,11 @@ def _run_domain_eval(
         "1" if allow_provisional_inject else "0"
     )
     os.environ["SAGE_TAU2_INJECT_SAME_DOMAIN_ONLY"] = "1"
-    os.environ["SAGE_TAU2_ENABLE_DISPATCH"] = "0" if executor_only else "1"
+    os.environ["SAGE_TAU2_ENABLE_DISPATCH"] = "0" if (executor_only or executor_with_skills) else "1"
     os.environ["SAGE_TAU2_DOMAIN"] = str(domain)
     dispatch_log = Path(skill_bank_path).resolve().parent / "dispatch_journal.jsonl"
     os.environ["SAGE_TAU2_DISPATCH_LOG"] = str(dispatch_log)
-    if executor_only:
+    if executor_only or executor_with_skills:
         os.environ["SAGE_TAU2_FORCE_PRIMARY"] = "Executor"
     else:
         os.environ.pop("SAGE_TAU2_FORCE_PRIMARY", None)
@@ -82,10 +83,11 @@ def _run_domain_eval(
         "max_inject_skills": max_inject_skills,
         "inject_provisional": allow_provisional_inject,
         "inject_same_domain_only": True,
-        "enable_executor_dispatch": not executor_only,
+        "enable_executor_dispatch": not (executor_only or executor_with_skills),
+        "enable_delegation": not (executor_only or executor_with_skills),
         "dispatch_log_path": str(dispatch_log),
     }
-    if executor_only:
+    if executor_only or executor_with_skills:
         llm_args_agent["force_primary"] = "Executor"
     if accepted_only:
         llm_args_agent["dispatch_config"] = {
@@ -160,6 +162,7 @@ def run_frozen_eval(
     task_split_name: str,
     llm_config_path: str | None,
     executor_only: bool = False,
+    executor_with_skills: bool = False,
     accepted_only: bool = False,
     dump_pro_trajectories: bool = True,
 ) -> dict[str, Any]:
@@ -197,6 +200,8 @@ def run_frozen_eval(
         save_to = f"sage_tau2_{output_root.name}_{domain}"
         if executor_only:
             mode = "executor_only"
+        elif executor_with_skills:
+            mode = "executor_with_same_skill_bank"
         elif accepted_only:
             mode = "frozen_sage_accepted_only"
         else:
@@ -222,6 +227,7 @@ def run_frozen_eval(
             agent_name=agent_name,
             task_split_name=task_split_name,
             executor_only=executor_only,
+            executor_with_skills=executor_with_skills,
             accepted_only=accepted_only,
         )
         stats = _reward_stats(payload)
@@ -268,6 +274,7 @@ def run_frozen_eval(
         ),
         "checkpoint": checkpoint_label,
         "executor_only": executor_only,
+        "executor_with_skills": executor_with_skills,
         "accepted_only": accepted_only,
         "model": model,
         "user_model": user,
@@ -311,6 +318,8 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Bare Executor baseline: no dispatch, no skill inject, no checkpoint",
     )
+    parser.add_argument("--executor-with-skills", action="store_true",
+        help="Executor alone using the frozen checkpoint skill bank; disables delegation")
     parser.add_argument(
         "--accepted-only",
         action="store_true",
@@ -372,6 +381,8 @@ def main(argv: list[str] | None = None) -> int:
     if not domains:
         domains = list(DEFAULT_DOMAINS)
 
+    if args.executor_with_skills and (args.executor_only or args.accepted_only):
+        raise SystemExit("--executor-with-skills cannot be combined with other role modes")
     if args.executor_only and args.accepted_only:
         raise SystemExit("--executor-only and --accepted-only are mutually exclusive")
     if not args.executor_only and not args.checkpoint:
@@ -396,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         task_split_name=args.task_split_name,
         llm_config_path=args.llm_config,
         executor_only=args.executor_only,
+        executor_with_skills=args.executor_with_skills,
         accepted_only=args.accepted_only,
         dump_pro_trajectories=not args.no_dump_pro_trajectories,
     )

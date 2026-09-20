@@ -69,7 +69,7 @@ class ExecutorToolGuardSmokeTests(unittest.TestCase):
         self.assertIn("`refuel_data`", addendum)
         self.assertIn("NOT callable by you", addendum)
         self.assertIn("toggle_airplane_mode", addendum)
-        self.assertIn("Do not transfer to a human after only looking up", addendum)
+        self.assertIn("ask the user to perform it, wait for their", addendum)
         # Principle-level escalate guidance — no write-tool checklist.
         self.assertNotIn("must call refuel_data", addendum.lower())
 

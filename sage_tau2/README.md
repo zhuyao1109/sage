@@ -218,3 +218,62 @@ PYTHONPATH=.. uv run python -m sage_tau2.runners.eval_frozen \
 | `pipeline.py` | segment update |
 | `runners/online_multidomain.py` | multi-domain evolve |
 | `runners/eval_frozen.py` | frozen OOD |
+
+## Telecom: execution, skills, and controlled organization evaluation
+
+The runtime now records per-turn `sage_skill_event` in assistant `raw_data`:
+`actor`, `owner`, `offered_skill_ids`, `adopted_skill_ids`, bounded subtask,
+expected result, and actual emitted tool calls. PRO exports retain these events,
+cross-role call order, and exact tool results keyed by call ID. Initialization
+journals are not proof that a skill was adopted.
+
+- Tool-backed observations survive the short dialogue window in an evidence
+  ledger. Old observations remain observations, not claims about current state.
+- Skill cards preserve tool/user ordering and are packed whole. Cards exceeding
+  the prompt budget are omitted and are not counted as offered.
+- Newly distilled contracts record observed argument sources and target-scoped
+  supporting conditions. These are observational hints, not learned causal
+  preconditions. Different ordered contracts are not merged merely because
+  they share an agent write name.
+- Modern credit separates offered, adopted, and executed episodes. Evaluator
+  action checks are used only offline for argument-level local attribution;
+  unknown outcomes remain neutral. Birth evidence adds only new support and
+  does not erase online failures. Historical trajectories without runtime
+  adoption events still use the explicitly labeled legacy proxy path.
+- Executor chooses each next turn. Eligible specialists must pass a same-skill
+  paired probe and own a currently offered skill. Multiple specialists can act
+  sequentially in one shared environment, with feedback visible before the
+  next choice. This is sequential role delegation, not parallel environment
+  mutation or independent specialist conversation threads.
+- Retrieval/coordinator call costs and numeric usage are included in returned
+  assistant accounting and preserved in `sage_auxiliary_calls`.
+
+Three fresh-run configs use the same model, seed, sampling, and validation size:
+
+1. `configs/telecom_stage1_execution.yaml`: Executor, no skill injection.
+2. `configs/telecom_stage2_skills.yaml`: Executor with learned skill retrieval.
+3. `configs/telecom_stage3_organization.yaml`: skill retrieval, paired admission,
+   and bounded delegation. Admission excludes assigned skills' training task
+   IDs and fixed validation IDs. An empty matching pool is not widened.
+
+Run each with `python -m sage_tau2.runners.online_tau2 --config <config>
+--output <fresh-output-dir>` from the configured tau2-bench runtime, using the
+same model credentials/configuration. Do not resume these controlled runs from
+an old seed bank or mix their output directories. Compare infrastructure errors
+separately from scored task failures.
+
+For a frozen checkpoint, `eval_frozen --checkpoint <checkpoint>
+--executor-with-skills --output <fresh-control-dir> ...` keeps the checkpoint's
+skill bank while disabling delegation. Use the identical checkpoint, split,
+model, seed and skill limit for the organization arm without that flag.
+`--executor-only` remains the *bare* baseline with an empty bank. Paired admission
+uses identical fixed skills in both arms by default; `bare_executor=True` is a
+legacy ablation and cannot establish the new runtime's same-skill admission flag.
+
+Known limits: contracts do not implement a symbolic state verifier; retrieval
+still uses a small text query plus BM25; clustering measures tool-name novelty,
+not causal or behavioral novelty; nomination still permits one carrier per
+capability. The coordinator has no persistent subtask progress object. Old
+accepted specialists require a fresh same-skill admission before delegation;
+there is no automatic migration/revalidation of old checkpoints. Offline tests
+validate mechanics, not improved telecom success rate.

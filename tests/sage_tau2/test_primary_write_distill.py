@@ -98,7 +98,7 @@ class ProtocolHelperTests(unittest.TestCase):
             resolved_line_id=True,
         )
         joined = " | ".join(proto)
-        self.assertIn("do_not_pass_guessed_line_id", joined)
+        self.assertIn("preserve_entity_type_and_match_requested_entity", joined)
         self.assertIn("never_default_first_listed_line", joined)
         self.assertNotIn("line_id=<resolved_line_id>", joined)
 

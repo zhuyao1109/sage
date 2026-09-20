@@ -1,16 +1,14 @@
-"""τ² Spec-vs-Exec admission probe (paired specialist vs bare Executor).
+"""τ² paired admission: same skills/model/budget for specialist and Executor.
 
-Mirrors sage_mas ``probe_actor_promotion(..., bare_executor=True)``:
-run the same capability-scoped task sample twice — once forcing the specialist
-primary (with assigned skills), once forcing Executor with **no skill inject** —
-and compare success rates on tasks that completed without infrastructure errors.
+Run the same capability-scoped task sample with identical skills, model and
+budget in both roles. Score only paired tasks without infrastructure errors.
+The bare-Executor ablation is opt-in and is not the default admission test.
 """
 
 from __future__ import annotations
 
 import os
 import random
-import shutil
 from copy import deepcopy
 from dataclasses import fields
 from pathlib import Path
@@ -179,6 +177,7 @@ def select_capability_probe_task_ids(
     seed: int,
     split_name: str = "train",
     task_loader: Any | None = None,
+    excluded_task_ids: list[str] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """Sample probe tasks on the specialist's skill-match subset when possible."""
     if task_loader is None:
@@ -196,6 +195,10 @@ def select_capability_probe_task_ids(
         "n_assigned_skills": len(assigned),
     }
     tasks = task_loader(task_set_name=domain, task_split_name=split_name)
+    excluded = set(excluded_task_ids or [])
+    excluded.update(str(tid) for sk in assigned for tid in (sk.metadata or {}).get("task_ids", []))
+    tasks = [t for t in tasks if _task_id(t) not in excluded]
+    meta["excluded_task_ids"] = sorted(excluded)
 
     pool_ids: list[str] = []
     if assigned:
@@ -212,9 +215,9 @@ def select_capability_probe_task_ids(
         meta["pool_size"] = len(pool_ids)
         meta["reason"] = "skill_match_sample"
         if not pool_ids:
-            meta["note"] = (
-                "no skill-matching tasks; falling back to write-capability scopes"
-            )
+            meta["note"] = "no skill-matching tasks; do not widen the admission pool"
+            meta["sampled_task_ids"] = []
+            return [], meta
     if not pool_ids:
         if not scopes:
             meta["reason"] = "specialist has no capability scope for probe filtering"
@@ -265,7 +268,7 @@ def _empty_probe_result(
         "mode": "spec_vs_exec",
         "probe_task_selection": selection,
         "requested_tasks": int(num_tasks),
-        "bare_executor": True,
+        "bare_executor": False,
     }
 
 
@@ -285,7 +288,8 @@ def run_spec_vs_exec_probe(
     agent_name: str = "sage_tau2",
     probe_dir: Path | None = None,
     task_split_name: str = "train",
-    bare_executor: bool = True,
+    bare_executor: bool = False,
+    excluded_task_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Paired forced-primary rollouts; returns SR stats for admission_would_pass."""
     from tau2.data_model.simulation import TextRunConfig
@@ -303,6 +307,7 @@ def run_spec_vs_exec_probe(
         num_tasks=int(num_tasks),
         seed=int(seed),
         split_name=str(task_split_name),
+        excluded_task_ids=excluded_task_ids,
     )
     write_json(probe_dir / f"{tag}_task_selection.json", selection)
     if not task_ids:
@@ -326,15 +331,13 @@ def run_spec_vs_exec_probe(
         probe_agents.append(_clone_agent(specialist))
     Organization(probe_agents).save(probe_org_path)
 
+    shared_ids = [s.skill_id for s in resolve_assigned_skills(specialist.assigned_skills, skills)][:4]
+    env_keys = ["SAGE_TAU2_SKILL_BANK", "SAGE_TAU2_ORG_PATH", "SAGE_TAU2_FORCE_PRIMARY", "SAGE_TAU2_ENABLE_DISPATCH", "SAGE_TAU2_DOMAIN"]
+    previous_env = {key: os.environ.get(key) for key in env_keys}
+
     def _one(force_primary: str, label: str, *, max_inject_skills: int) -> dict[str, Any]:
-        save_to = f"sage_tau2_probe_{tag}_{label}_s{seed}"
-        # Probe save names are deterministic (specialist + seed), so a stale
-        # directory from an earlier run would trigger tau2's interactive
-        # resume prompt and block the pipeline. Probes must reflect the
-        # CURRENT bank/org — always start fresh.
-        stale_dir = Path("data/simulations") / save_to
-        if stale_dir.exists():
-            shutil.rmtree(stale_dir, ignore_errors=True)
+        from uuid import uuid4
+        save_to = f"sage_tau2_probe_{tag}_{label}_s{seed}_{uuid4().hex[:8]}"
         os.environ["SAGE_TAU2_SKILL_BANK"] = str(skill_bank_path)
         os.environ["SAGE_TAU2_ORG_PATH"] = str(probe_org_path)
         os.environ["SAGE_TAU2_FORCE_PRIMARY"] = force_primary
@@ -356,9 +359,12 @@ def run_spec_vs_exec_probe(
                 "skill_bank_path": str(skill_bank_path),
                 "organization_path": str(probe_org_path),
                 "force_primary": force_primary,
+                "fixed_skill_ids": shared_ids if max_inject_skills else [],
+                "enable_delegation": False,
+                "select_skills": True,
+                "dispatch_log_path": str(probe_dir / f"{tag}_{label}_dispatch.jsonl"),
                 "enable_executor_dispatch": True,
-                # Specialist arm uses assigned skills via org. Executor arm uses
-                # bare_executor ⇒ max_inject_skills=0 (sage_mas Spec-vs-Exec).
+                # Both arms get the exact same fixed skill set by default.
                 "max_inject_skills": int(max_inject_skills),
                 "inject_provisional": True,
                 "dispatch_config": {
@@ -387,7 +393,11 @@ def run_spec_vs_exec_probe(
         exec_inject = 0 if bare_executor else 4
         exec_ = _one(EXECUTOR_NAME, "exec", max_inject_skills=exec_inject)
     finally:
-        os.environ.pop("SAGE_TAU2_FORCE_PRIMARY", None)
+        for key, value in previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     paired = paired_probe_scores(spec["payload"], exec_["payload"])
     print(
@@ -424,6 +434,8 @@ def run_spec_vs_exec_probe(
         "probe_task_selection": selection,
         "requested_tasks": int(num_tasks),
         "bare_executor": bool(bare_executor),
+        "comparison": "same_skills_same_model_same_turn_budget" if not bare_executor else "legacy_bare_executor",
+        "shared_skill_ids": shared_ids,
         "scored_task_ids": paired["scored_task_ids"],
         "dropped_infra_task_ids": paired["dropped_infra_task_ids"],
         "n_shared_raw": paired["n_shared_raw"],
@@ -441,7 +453,9 @@ def make_probe_callback(
     max_concurrency: int = 1,
     agent_name: str = "sage_tau2",
     probe_dir: Path | None = None,
-    bare_executor: bool = True,
+    bare_executor: bool = False,
+    excluded_task_ids: list[str] | None = None,
+    task_split_name: str = "train",
 ):
     """Build a SpecVsExecProbe closure for ``run_nominate_admit``."""
 
@@ -472,8 +486,9 @@ def make_probe_callback(
             max_concurrency=max_concurrency,
             agent_name=agent_name,
             probe_dir=probe_dir,
-            task_split_name="train",
+            task_split_name=task_split_name,
             bare_executor=bare_executor,
+            excluded_task_ids=excluded_task_ids,
         )
 
     return _probe

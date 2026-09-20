@@ -908,8 +908,8 @@ def bind_protocol_slots(
             saw_details = True
             if saw_customer_lookup and "id=?" in step:
                 out.append(
-                    "get_details_by_id(id=<customer_id_from_prior_lookup;"
-                    "do_not_pass_guessed_line_id>)"
+                    "get_details_by_id(id=<entity_id_from_prior_tool_result;"
+                    "preserve_entity_type_and_match_requested_entity>)"
                 )
             else:
                 out.append(step)
@@ -1945,7 +1945,9 @@ def distill_skills_from_trajectories(
             trajs,
             require_shared_guides=bool(shared_guides),
         )
-        protocol = reorder_protocol_hard_writes_first(protocol)
+        from sage_tau2.contracts import interleave_evidence_guides
+        protocol = interleave_evidence_guides(protocol, trajs)
+        # Preserve causal dependencies; do not move writes ahead of user actions.
         # Agent-tool subset is derived from the final action_protocol (incl. yes-branch embeds).
         agent_tools = agent_tool_protocol(protocol, domain=domain)
         if not agent_tools:
@@ -2034,6 +2036,8 @@ def distill_skills_from_trajectories(
                 "intent_cues_legacy": _intent_cues_from_trajs_legacy(trajs),
             },
         )
+        from sage_tau2.contracts import learn_contract
+        skill.metadata["execution_contract"] = learn_contract(skill, trajs)
         skills.append(skill)
     return skills
 

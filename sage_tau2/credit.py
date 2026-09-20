@@ -231,10 +231,11 @@ def seed_credit_from_birth_support(
 
     uses = int(credit.get("uses") or 0)
     successes = int(credit.get("successes") or 0)
-    if uses < support:
-        credit["uses"] = support
-        # Birth trajectories were success-gated by distill.
-        credit["successes"] = max(successes, support)
+    old_birth = int(credit.get("birth_uses", max(0, uses - int(credit.get("online_uses") or 0))))
+    delta = max(0, support - old_birth)
+    if delta:
+        credit["uses"] = uses + delta
+        credit["successes"] = successes + delta
         credit["score"] = _smoothed(
             int(credit["successes"]),
             int(credit["uses"]),
@@ -242,8 +243,8 @@ def seed_credit_from_birth_support(
         credit.setdefault("online_uses", 0)
         credit.setdefault("online_successes", 0)
         credit.setdefault("online_fail_streak", 0)
-        credit["birth_uses"] = support
-        credit["birth_successes"] = support
+        credit["birth_uses"] = old_birth + delta
+        credit["birth_successes"] = int(credit.get("birth_successes", old_birth)) + delta
         skill.metadata["utility"] = float(credit["score"])
         meta = dict(skill.metadata or {})
         meta["credit_seeded_from_birth"] = True
@@ -289,6 +290,15 @@ def apply_credit_for_episode(
 ) -> list[dict[str, Any]]:
     """Count uses for skills that matched coverage (optionally inject-gated)."""
     policy = policy or CreditPolicy()
+    if "infrastructure" in str(trajectory.termination_reason or "").lower():
+        return []
+    runtime_events = trajectory.metadata.get("skill_events")
+    if any(e.get("version") == 2 for e in runtime_events or []):
+        from sage_tau2.execution_credit import apply_execution_credit
+        return apply_execution_credit(skills, trajectory, policy)
+    modern = runtime_events is not None
+    adopted = {sid for e in (runtime_events or []) for sid in e.get("adopted_skill_ids", [])}
+    offered = {sid for e in (runtime_events or []) for sid in e.get("offered_skill_ids", [])}
     injected = set(injected_skill_ids or [])
     events: list[dict[str, Any]] = []
     episode_scope = episode_scope_from_task_id(trajectory.task_id)
@@ -296,10 +306,16 @@ def apply_credit_for_episode(
         if skill.status in {SkillStatus.REJECTED, SkillStatus.RETIRED}:
             continue
         credit = initialize_credit(skill)
-        # If injection list is provided and non-empty, only credit offered skills.
-        if injected and skill.skill_id not in injected:
+        if modern:
+            if skill.skill_id in offered:
+                credit["offered_episodes"] = int(credit.get("offered_episodes") or 0) + 1
+            if skill.skill_id not in adopted:
+                continue
+            credit["adopted_episodes"] = int(credit.get("adopted_episodes") or 0) + 1
+        # Explicit empty means no skills; None retains legacy unknown semantics.
+        if not modern and injected_skill_ids is not None and skill.skill_id not in injected:
             continue
-        if policy.gate_irrelevant and not skill_credit_should_apply(
+        if not modern and policy.gate_irrelevant and not skill_credit_should_apply(
             skill,
             domain=trajectory.domain,
             task_id=trajectory.task_id,
@@ -313,9 +329,9 @@ def apply_credit_for_episode(
             or []
         )
         coverage = protocol_coverage(skill_proto, trajectory.tool_protocol)
-        if coverage < policy.min_protocol_coverage:
+        if not modern and coverage < policy.min_protocol_coverage:
             continue
-        if policy.require_full_write_spine:
+        if not modern and policy.require_full_write_spine:
             from sage_tau2.distill import _tool_name, primary_write_names
 
             skill_writes = set(primary_write_names(skill_proto))
@@ -330,11 +346,21 @@ def apply_credit_for_episode(
                 if not skill_writes.issubset(traj_tool_names):
                     continue
         arg_score = hard_write_arg_match_score(skill, trajectory)
-        success = episode_counts_as_credit_success(
-            skill,
-            trajectory,
-            require_hard_write_arg_match=bool(policy.require_hard_write_arg_match),
-        )
+        if modern:
+            from sage_tau2.contracts import local_skill_outcome
+            local = local_skill_outcome(skill, trajectory, runtime_events)
+            credit["executed_episodes"] = int(credit.get("executed_episodes") or 0) + int(local["executed"])
+            if local["success"] is None:
+                events.append({"skill_id": skill.skill_id, "task_id": trajectory.task_id,
+                               "outcome": local["outcome"], "success": None, "online": True})
+                continue
+            success = bool(local["success"])
+        else:
+            local = {"outcome": "legacy_episode_proxy"}
+            success = episode_counts_as_credit_success(
+                skill, trajectory,
+                require_hard_write_arg_match=bool(policy.require_hard_write_arg_match),
+            )
         credit["uses"] = int(credit.get("uses") or 0) + 1
         credit["online_uses"] = int(credit.get("online_uses") or 0) + 1
         if success:
@@ -361,6 +387,8 @@ def apply_credit_for_episode(
             "reward": trajectory.reward,
             "success_mode": (trajectory.metadata or {}).get("success_mode"),
             "online": True,
+            "outcome": local["outcome"],
+            "task_success": trajectory.success,
         }
         events_list = credit.setdefault("events", [])
         if isinstance(events_list, list):

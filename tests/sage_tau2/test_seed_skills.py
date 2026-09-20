@@ -55,7 +55,7 @@ class SeedSkillsTests(unittest.TestCase):
             self.assertIn("report_gift_card_and_certificate_balances_separately", text)
             self.assertIn("use_dob_field_on_passenger_writes", text)
             self.assertIn("two separate", text)
-            self.assertIn("Protocol (follow this full card):", text)
+            self.assertIn("Protocol (preserve this order, including user actions):", text)
 
     def test_passenger_dob_skill_mentions_schema_field(self) -> None:
         skill = airline_passenger_dob_skill()

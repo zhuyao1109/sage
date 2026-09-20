@@ -51,8 +51,6 @@ class Tau2Trajectory:
 
     @property
     def success(self) -> bool:
-        if self.db_match is True:
-            return True
         return float(self.reward or 0.0) >= 1.0
 
     @property
