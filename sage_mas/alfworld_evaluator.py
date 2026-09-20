@@ -17,6 +17,7 @@ from examples.prompt_agent.gpt4o_alfworld import (
     build_alfworld_env_manager,
 )
 from sage_mas.executor_dispatch import (
+    AgentAssignment,
     ExecutorDispatchConfig,
     ExecutorDispatcher,
     dispatch_config_from_mapping,
@@ -67,7 +68,7 @@ class AlfWorldEvaluatorConfig:
     seed: int = 1
     save_steps: bool = True
     max_advisors: int | None = None
-    # Max skills mounted from one on-demand BM25 hit list.
+    # Max skills accepted after semantic filtering of the BM25 shortlist.
     max_injected_skills: int = 2
     # Probe-only: skip prompt-based retrieval and inject every candidate
     # skill directly (discovery forks / paired marginal-utility probes).
@@ -79,6 +80,8 @@ class AlfWorldEvaluatorConfig:
     skill_recall_top_k: int = 8
     # True: LLM writes the query (and may decline). False: task text is the query.
     skill_recall_query_llm: bool = True
+    # Explicit False is the raw-BM25 ablation; default reranks before mounting.
+    skill_recall_semantic_filter: bool = True
     # Deprecated no-op: visited-location expert memory removed.
     use_visited_location_memory: bool = False
     # Skip org-assigned / bank skills (executor-only reporting ablation).
@@ -152,6 +155,26 @@ class AlfWorldOrganizationEvaluator:
             enabled=controllers_on
         )
 
+    def _turn_delegation_enabled(self) -> bool:
+        return (self.config.executor_dispatch.enabled
+                and self.config.executor_dispatch.mode == 'turn'
+                and not self.config.force_inject_skills
+                and not self.config.ignore_assigned_skills
+                and not self.config.enable_specialist_controllers
+                and self.config.prompt_style == 'alfworld')
+
+    def _initial_assignment(self, **kwargs) -> AgentAssignment:
+        if self._turn_delegation_enabled():
+            return AgentAssignment(primary_agent=kwargs['executor_name'],
+                dispatch_layer='executor_turn_coordinator', rationale='Executor owns task; route each observed turn')
+        return self.dispatcher.assign(**kwargs)
+
+    @staticmethod
+    def _dispatch_evidence(assignment: AgentAssignment, steps: list[dict]) -> dict:
+        return {**assignment.evidence, 'owner': assignment.primary_agent,
+                'turns': [step['skill_retrieval']['turn_dispatch'] for step in steps
+                          if 'turn_dispatch' in (step.get('skill_retrieval') or {})]}
+
     def evaluate(
         self,
         agents: list[AgentSpec],
@@ -207,6 +230,7 @@ class AlfWorldOrganizationEvaluator:
                 self.config.allow_executor_skill_injection
             ),
             strict_skill_selection=True,
+            turn_delegation=self._turn_delegation_enabled(),
             skill_inject_mode=str(self.config.skill_inject_mode or "full"),
             skill_reinject_every=int(self.config.skill_reinject_every or 0),
             enhancement_config=_get_enhancement_config(),
@@ -253,7 +277,7 @@ class AlfWorldOrganizationEvaluator:
             )
             tasks = [_extract_task_from_obs(obs["anchor"][i]) for i in range(len(gamefiles))]
             assignments = [
-                self.dispatcher.assign(
+                self._initial_assignment(
                     task=tasks[index],
                     task_family=_task_family_from_gamefile(gamefiles[index]),
                     agents=agents,
@@ -474,7 +498,7 @@ class AlfWorldOrganizationEvaluator:
                     assignment_rationale=assignments[index].rationale,
                     eligible_agents=list(assignments[index].eligible_agents),
                     dispatch_layer=assignments[index].dispatch_layer or None,
-                    dispatch_evidence=dict(assignments[index].evidence),
+                    dispatch_evidence=self._dispatch_evidence(assignments[index], steps[index]),
                     actions_by_agent=dict(actions_by_agent[index]),
                 )
                 for index, gamefile in enumerate(gamefiles)
@@ -566,12 +590,14 @@ class AlfWorldOrganizationEvaluator:
         *,
         task: str,
         observation: str,
+        history_steps: list[dict[str, Any]] | None = None,
     ) -> tuple[list[Skill], dict[str, Any]]:
         """One-step on-demand recall.
 
         The Executor writes a query for the current observation, or declines.
         A real query searches the whole bank; ``none`` / a failed call mounts
-        nothing. Hits are capped by ``max_injected_skills``.
+        nothing. The wider shortlist is filtered before up to max_injected_skills
+        can be mounted. Raw hits are available only in the explicit ablation.
         """
         info: dict[str, Any] = {
             "backend": self.config.skill_recall_backend,
@@ -603,22 +629,76 @@ class AlfWorldOrganizationEvaluator:
             info["skipped"] = True
             return [], info
         info["query"] = query
-        mount_k = min(
-            max(0, self.config.max_injected_skills),
-            max(0, self.config.skill_recall_top_k),
-        )
+        mount_k = max(0, self.config.max_injected_skills)
         if mount_k <= 0:
             info["skipped"] = True
             return [], info
-        ranked = recall_index.search(tokenize(query), mount_k)
+        ranked = recall_index.search(tokenize(query), max(0, self.config.skill_recall_top_k))
         chosen = [(index, score) for index, score in ranked if score > 0.0]
         shortlist = [recall_skills[index] for index, _score in chosen]
         info["shortlist"] = [
             {"name": recall_skills[index].skill_name, "score": round(score, 4)}
             for index, score in chosen
         ]
-        info["selected"] = [skill.skill_name for skill in shortlist]
-        return shortlist, info
+        selected = shortlist[:mount_k]
+        if self.config.skill_recall_semantic_filter and shortlist:
+            from sage_mas.alfworld_coordination import evidence_context, selection_prompt, parse_selection
+            context = evidence_context(task, observation, history_steps)
+            info['selection_mode'] = 'semantic'
+            try:
+                result = self.backend.complete('', selection_prompt(context, shortlist, mount_k))
+                info['selection_raw_reply'] = result.content
+                info['token_cost'] += result.total_tokens
+                selected, info['selection_evidence'] = parse_selection(result.content, shortlist, context, mount_k)
+            except Exception as exc:
+                selected = []
+                info['selection_error'] = f'{type(exc).__name__}: {exc}'
+        else:
+            info['selection_mode'] = 'raw_bm25' if not self.config.skill_recall_semantic_filter else 'empty'
+        info["selected"] = [skill.skill_name for skill in selected]
+        return selected, info
+
+    def _coordinate_turn(self, runtime, *, task, observation, history_steps, skills,
+                         agents, task_family, gamefile):
+        from sage_mas.alfworld_coordination import evidence_context, turn_prompt, parse_turn
+        owner = runtime.executor.name
+        plan = {'actor': owner, 'skill_id': '', 'subtask': 'Resolve the next observed unmet objective',
+                'reason': 'Executor retains control', 'expected_result': 'Actual environment feedback'}
+        info = {'owner': owner, 'token_cost': 0, 'raw_reply': None, 'error': None}
+        delegated = sum(bool(step.get('agent_messages'))
+                        and step['agent_messages'][-1].get('agent') != owner for step in history_steps)
+        eligible = self.dispatcher._eligible_specialists(agents=agents, skills=skills, task=task,
+            task_family=task_family, gamefile=gamefile, executor=runtime.executor)
+        if delegated >= self.config.executor_dispatch.max_delegated_turns:
+            eligible = []
+            info['budget_exhausted'] = True
+        # Even open-roster ablations cannot delegate without a selected owned skill.
+        eligible = [(agent, owned) for agent, owned in eligible if owned]
+        roster = [{'name': owner, 'role': 'Task owner; may execute any selected skill',
+                   'owned_skill_ids': [s.skill_id for s in skills]}]
+        roster += [{'name': agent.name, 'role': agent.role_specification or agent.role,
+                    'boundary': agent.responsibility_boundary,
+                    'owned_skill_ids': [s.skill_id for s in owned]} for agent, owned in eligible]
+        info['eligible_agents'] = [a.name for a, _ in eligible]
+        info['delegated_turns_used'] = delegated
+        used = list(skills[:1])
+        if used:
+            plan['skill_id'] = used[0].skill_id
+        if eligible:
+            context = evidence_context(task, observation, history_steps)
+            try:
+                result = self.backend.complete('', turn_prompt(owner, context, skills, roster))
+                info['token_cost'] = result.total_tokens
+                info['raw_reply'] = result.content
+                plan = parse_turn(result.content, owner, skills, roster)
+                used = [s for s in skills if s.skill_id == plan['skill_id']]
+            except Exception as exc:
+                plan['skill_id'] = ''
+                plan['reason'] = 'invalid_turn_plan_fallback'
+                used = []
+                info['error'] = f'{type(exc).__name__}: {exc}'
+        info['plan'] = dict(plan)
+        return plan, used, info
 
     def _act_with_skill_retrieval(
         self,
@@ -643,8 +723,9 @@ class AlfWorldOrganizationEvaluator:
 
         Returns ``(runtime_action, retrieval_info, shown_skill_names)``.
         Only an Executor primary retrieves. Each step the model may write a
-        query; BM25 hits are mounted directly. Specialists keep their
-        verified assigned contract for the whole episode.
+        query; BM25 hits pass an applicability selection before mounting. In
+        turn mode Executor then chooses a bounded actor; episode-mode specialists
+        keep their verified assigned contracts for the episode.
         """
         active_injected: list[Skill] = []
         active_assigned_names: set[str] = set()
@@ -671,6 +752,7 @@ class AlfWorldOrganizationEvaluator:
                     recall_index,
                     recall_skills or [],
                     task=task,
+                    history_steps=history_steps,
                     observation=(
                         retrieval_observation
                         if retrieval_observation is not None
@@ -717,6 +799,24 @@ class AlfWorldOrganizationEvaluator:
                     if skill.skill_name in primary_skill_names
                     and skill.status == SkillStatus.VERIFIED
                 ]
+        if self._turn_delegation_enabled():
+            plan, used, dispatch_info = self._coordinate_turn(runtime, task=task,
+                observation=retrieval_observation if retrieval_observation is not None else observation,
+                history_steps=history_steps,
+                skills=list({s.skill_id: s for s in [*active_injected,
+                    *(s for s in assigned_skills if s.skill_name in active_assigned_names)]}.values()), agents=agents,
+                task_family=task_family, gamefile=gamefile)
+            primary_agent = plan['actor']
+            active_injected = used
+            active_assigned_names = {s.skill_name for s in used}
+            shown = [s.skill_name for s in used]
+            retrieval_info = retrieval_info or {'selected': [], 'token_cost': 0}
+            retrieval_info['turn_dispatch'] = dispatch_info
+            retrieval_info['adopted'] = shown
+            retrieval_info['token_cost'] = int(retrieval_info.get('token_cost', 0)) + dispatch_info['token_cost']
+            observation += ('\n\nExecutor turn assignment: ' + str(plan) + '\nExecute exactly one admissible '
+                            f'action for this bounded objective, then return control to {runtime.executor.name}. '
+                            'Expected results are not observed facts. Preserve confirmed progress.')
         result = runtime.act(
             observation,
             active_injected,
@@ -788,6 +888,7 @@ class AlfWorldOrganizationEvaluator:
                 self.config.allow_executor_skill_injection
             ),
             strict_skill_selection=True,
+            turn_delegation=self._turn_delegation_enabled(),
             skill_inject_mode=str(self.config.skill_inject_mode or "full"),
             skill_reinject_every=int(self.config.skill_reinject_every or 0),
             enhancement_config=_get_enhancement_config(),
@@ -822,7 +923,7 @@ class AlfWorldOrganizationEvaluator:
             obs, infos = env_manager.reset({})
             task = _extract_task_from_obs(obs["anchor"][0])
             task_family = _task_family_from_gamefile(gamefile)
-            assignment = self.dispatcher.assign(
+            assignment = self._initial_assignment(
                 task=task,
                 task_family=task_family,
                 agents=agents,
@@ -980,7 +1081,7 @@ class AlfWorldOrganizationEvaluator:
                 assignment_rationale=assignment.rationale,
                 eligible_agents=list(assignment.eligible_agents),
                 dispatch_layer=assignment.dispatch_layer or None,
-                dispatch_evidence=dict(assignment.evidence),
+                dispatch_evidence=self._dispatch_evidence(assignment, steps),
             )
         finally:
             env_manager.close()

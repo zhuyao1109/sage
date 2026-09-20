@@ -5418,8 +5418,9 @@ class SageCoreTest(unittest.TestCase):
         raw = "You arrive at sinkbasin 1."
         self.assertEqual(retrieval_situation(raw), raw)
 
-    def test_evaluator_on_demand_recall_mounts_bm25_hits(self):
+    def test_explicit_raw_bm25_ablation_mounts_hits(self):
         from sage_mas.skill_recall import build_recall_index
+        from sage_mas.executor_dispatch import ExecutorDispatchConfig
 
         class FakeBackend:
             def complete(self, system_prompt, user_prompt):
@@ -5463,7 +5464,8 @@ class SageCoreTest(unittest.TestCase):
         )
         evaluator = AlfWorldOrganizationEvaluator(
             FakeBackend(),
-            AlfWorldEvaluatorConfig(max_injected_skills=2),
+            AlfWorldEvaluatorConfig(max_injected_skills=2, skill_recall_semantic_filter=False,
+                executor_dispatch=ExecutorDispatchConfig(mode="episode")),
         )
         runtime = FakeRuntime()
         index, skills = build_recall_index([cool, place])

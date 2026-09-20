@@ -41,6 +41,10 @@ class ExecutorDispatchConfig:
     """How the Executor chooses a primary agent for a new task."""
 
     enabled: bool = True
+    # ALFWorld collection: Executor owns the episode and routes one turn at a time.
+    # Explicit episode mode retains the original whole-task routing control.
+    mode: str = 'turn'
+    max_delegated_turns: int = 20
     allow_dormant: bool = True
     # Keep False so Executor compares itself with every candidate specialist.
     auto_assign_single: bool = True
@@ -764,8 +768,12 @@ def _acting_status(agent: AgentSpec) -> str:
 
 def dispatch_config_from_mapping(raw: dict[str, Any] | None) -> ExecutorDispatchConfig:
     raw = raw or {}
+    if raw.get('mode', 'turn') not in {'turn', 'episode'}:
+        raise ValueError('executor_dispatch.mode must be turn or episode')
     return ExecutorDispatchConfig(
         enabled=bool(raw.get("enabled", True)),
+        mode=str(raw.get('mode', 'turn')),
+        max_delegated_turns=max(0, int(raw.get('max_delegated_turns', 20))),
         allow_dormant=bool(raw.get("allow_dormant", True)),
         auto_assign_single=bool(raw.get("auto_assign_single", True)),
         require_accepted_for_primary=bool(

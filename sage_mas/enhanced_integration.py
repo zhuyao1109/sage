@@ -258,6 +258,11 @@ class EnhancedMASRuntime(MASRuntime):
         injected_skills: list[Skill] | None,
     ) -> list[Skill]:
         """Get list of currently active skills for the actor."""
+        if self.turn_delegation:
+            # Use the selected Skill objects, not an ambiguous name lookup that
+            # may resolve another revision of a skill with the same name.
+            return [s for s in (injected_skills or [])
+                    if actor.agent_id == self.executor.agent_id or s.skill_name in actor.assigned_skills]
         skills = []
 
         # Assigned skills

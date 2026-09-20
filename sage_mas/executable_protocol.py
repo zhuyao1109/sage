@@ -61,68 +61,62 @@ def ensure_executable_protocol(
     force: bool = False,
     max_steps: int = 16,
 ) -> list[ExecutableStep]:
-    """Fill skill.metadata['executable_protocol'] from trajectory or protocol."""
+    """Compile the distilled protocol; trajectory records only annotate evidence.
+
+    The fingerprint invalidates legacy detour caches and edited protocols.
+    Never truncate the canonical action sequence to a trajectory-prefix budget.
+    """
+    import hashlib
+    import json
+
     existing = get_executable_steps(skill)
-    source = str(skill.metadata.get("executable_protocol_source") or "")
-    if (
-        existing
-        and not force
-        and not trajectory_steps
-        and source in {"trajectory", "confirmed_transitions", "action_protocol"}
-        and not protocol_has_instance_literals(existing)
-    ):
-        return existing
-    if (
-        existing
-        and not force
-        and not trajectory_steps
-        and not protocol_has_instance_literals(existing)
-    ):
-        return existing
-
-    steps: list[ExecutableStep] = []
-    used_source = "action_protocol"
-    if trajectory_steps:
-        steps = steps_from_trajectory(
-            trajectory_steps,
-            max_steps=max(1, int(max_steps)),
-        )
-        if steps:
-            used_source = "trajectory"
-    if not steps:
-        transitions = skill.metadata.get("confirmed_transitions") or []
-        if isinstance(transitions, list):
-            synthetic = [
-                {
-                    "action": str(item.get("action", "") or ""),
-                    "observation": str(item.get("observation", "") or ""),
-                }
-                for item in transitions
-                if isinstance(item, dict)
-            ]
-            steps = steps_from_trajectory(
-                synthetic,
-                max_steps=max(1, int(max_steps)),
-            )
-            if steps:
-                used_source = "confirmed_transitions"
-    if not steps:
-        steps = steps_from_action_protocol(skill.action_protocol or [])
-        used_source = "action_protocol"
-
-    # Never persist instance-overfit protocols (cup 1 / shelf 1, ...).
-    steps = [
-        ExecutableStep(
-            index=i,
-            action_template=role_slot_template(step.action_template),
-            expected_obs_hint=step.expected_obs_hint,
-            verb=step.verb or _first_verb(step.action_template),
-        )
-        for i, step in enumerate(steps)
-    ]
+    protocol = list(skill.action_protocol or [])
+    signature = hashlib.sha256(json.dumps(protocol, ensure_ascii=False).encode()).hexdigest()
+    canonical = steps_from_action_protocol(protocol)
+    if canonical:
+        if (not force and not trajectory_steps
+                and skill.metadata.get("executable_protocol_version") == 2
+                and skill.metadata.get("executable_protocol_fingerprint") == signature
+                and [s.action_template for s in existing] == [s.action_template for s in canonical]):
+            return existing
+        records = trajectory_steps or skill.metadata.get("confirmed_transitions") or []
+        # Reuse hints only from a previously compiled, identical canonical list.
+        if (not records and skill.metadata.get("executable_protocol_version") == 2
+                and skill.metadata.get("executable_protocol_fingerprint") == signature
+                and [s.action_template for s in existing] == [s.action_template for s in canonical]):
+            records = [{"action": s.action_template, "observation": s.expected_obs_hint} for s in existing]
+        cursor = 0
+        matched = 0
+        for step in canonical:
+            for index in range(cursor, len(records)):
+                record = records[index]
+                if not isinstance(record, dict):
+                    continue
+                observation = str(record.get("observation") or "")
+                if "nothing happens" in observation.lower() or record.get("is_action_valid") is False:
+                    continue
+                if action_matches_template(str(record.get("action") or ""), step.action_template):
+                    step.expected_obs_hint = " ".join(observation.split())[:160]
+                    matched += bool(step.expected_obs_hint)
+                    cursor = index + 1
+                    break
+        steps = canonical
+        source = "trajectory" if trajectory_steps and matched else (
+            "confirmed_transitions" if matched else "action_protocol")
+        skill.metadata["executable_evidence_matched_steps"] = matched
+    else:
+        # Compatibility for old evidence-only skills. No second protocol exists
+        # to disagree with here; once action_protocol is populated it wins.
+        if existing and not force and not trajectory_steps and not protocol_has_instance_literals(existing):
+            return existing
+        records = trajectory_steps or skill.metadata.get("confirmed_transitions") or []
+        steps = steps_from_trajectory(records, max_steps=max(1, int(max_steps)))
+        source = "trajectory" if trajectory_steps else "confirmed_transitions"
     skill.metadata[_METADATA_KEY] = [step.to_dict() for step in steps]
-    skill.metadata["executable_protocol_source"] = used_source
+    skill.metadata["executable_protocol_source"] = source
     skill.metadata["executable_protocol_role_slotted"] = True
+    skill.metadata["executable_protocol_version"] = 2
+    skill.metadata["executable_protocol_fingerprint"] = signature
     return steps
 
 
@@ -143,20 +137,19 @@ def protocol_has_instance_literals(steps: list[ExecutableStep]) -> bool:
 
 def steps_from_action_protocol(protocol: list[str]) -> list[ExecutableStep]:
     steps: list[ExecutableStep] = []
-    last = ""
     for instruction in protocol:
-        text = role_slot_template(" ".join(str(instruction or "").split()))
-        if not text or text == last:
+        text = _environment_action(" ".join(str(instruction or "").split()))
+        if not text:
             continue
-        steps.append(
-            ExecutableStep(
-                index=len(steps),
-                action_template=text,
-                expected_obs_hint="",
-                verb=_first_verb(text),
-            )
-        )
-        last = text
+        text = re.sub(r"\s+\d+(?=\s|$)", "", text)
+        if "<" in text:
+            text = role_slot_template(text)
+        else:
+            text = re.sub(r"^(take) .+?( from .+)$", r"\1 <target>\2", text)
+            text = re.sub(r"^(clean|heat|cool) .+?( with .+)$", r"\1 <target>\2", text)
+            text = re.sub(r"^(?:put|move) .+? (?:in|on|to) (.+)$", r"move <target> to \1", text)
+        # Repeated steps can encode distinct-object or repeated-operation tasks.
+        steps.append(ExecutableStep(index=len(steps), action_template=text, verb=_first_verb(text)))
     return steps
 
 
@@ -331,14 +324,51 @@ def soft_rank_admissible(
     return ranked[:top_k]
 
 
+def protocol_after_activation(
+    skill: Skill,
+    trial_steps: list[dict[str, Any]],
+    *,
+    activation_step: int = 1,
+) -> list[ExecutableStep]:
+    """Use observed prior progress as entry state, never as credited execution.
+
+    Only an in-order prefix with successful environment feedback is consumed.
+    Missing/failed prerequisites remain in the suffix; a completed protocol has
+    no remaining work to credit. This uses existing observation semantics and
+    does not add task-family execution policies.
+    """
+    from sage_mas.trajectory.abstraction import (
+        _observation_confirms_environment_effect,
+        _observation_is_noop,
+    )
+
+    protocol = ensure_executable_protocol(skill)
+    cursor = 0
+    start = max(0, int(activation_step) - 1)
+    for record in trial_steps[:start]:
+        if cursor >= len(protocol):
+            break
+        observation = record.get("observation")
+        if record.get("error") or record.get("result_error") or _observation_is_noop(observation):
+            continue
+        confirmed = _observation_confirms_environment_effect(observation)
+        # Historical wrappers sometimes flag successful ALFWorld actions false;
+        # explicit success observations take precedence over that noisy flag.
+        if not confirmed and record.get("is_action_valid") is not True:
+            continue
+        if action_matches_template(record.get("action", ""), protocol[cursor].action_template):
+            cursor += 1
+    return protocol[cursor:]
+
+
 def protocol_adherence_score(
     skill: Skill,
     trial_steps: list[dict[str, Any]],
     *,
     activation_step: int = 1,
 ) -> float:
-    """In-order fraction of executable steps matched after activation."""
-    protocol = ensure_executable_protocol(skill)
+    """In-order coverage of the remaining protocol after observed entry progress."""
+    protocol = protocol_after_activation(skill, trial_steps, activation_step=activation_step)
     if not protocol:
         return 0.0
     start = max(0, int(activation_step) - 1)

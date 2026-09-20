@@ -178,6 +178,7 @@ def update_skill_credits(
             from sage_mas.executable_protocol import (
                 ensure_executable_protocol,
                 protocol_adherence_score,
+                protocol_after_activation,
             )
 
             ensure_executable_protocol(skill)
@@ -220,6 +221,10 @@ def update_skill_credits(
                     task_id=trial.task_id,
                     extra={
                         "protocol_adherence": adherence,
+                        "activation_step": activation_step,
+                        "entry_step_index": len(ensure_executable_protocol(skill)) - len(
+                            protocol_after_activation(skill, trial.steps, activation_step=activation_step)
+                        ),
                         "won": win_ok,
                     },
                 )
@@ -338,7 +343,14 @@ def _trial_executes_skill(
         1,
         int(trial.skill_activation_steps.get(skill.skill_name, 1)),
     )
-    operations = _skill_execution_operations(skill)
+    from sage_mas.executable_protocol import protocol_after_activation
+
+    remaining = protocol_after_activation(skill, trial.steps, activation_step=activation_step)
+    if not remaining:
+        return False
+    operations = _skill_execution_operations(
+        skill, protocol=[step.action_template for step in remaining]
+    )
     if not operations:
         return False
     steps = trial.steps[activation_step - 1 :]
@@ -387,7 +399,7 @@ def trial_has_local_effect(skill: Skill, trial: EvaluationTrial) -> bool:
     return _has_local_effect(skill, trial)
 
 
-def _skill_execution_operations(skill: Skill) -> list[str]:
+def _skill_execution_operations(skill: Skill, *, protocol: list[str] | None = None) -> list[str]:
     """Verbs that count as executing the skill after activation.
 
     Prefer an explicit capability operation. Otherwise use productive protocol
@@ -403,7 +415,7 @@ def _skill_execution_operations(skill: Skill) -> list[str]:
         operation
         for operation in (
             _canonical_operation(instruction)
-            for instruction in skill.action_protocol
+            for instruction in (skill.action_protocol if protocol is None else protocol)
         )
         if operation and operation not in _WEAK_PROTOCOL_OPS
     ]

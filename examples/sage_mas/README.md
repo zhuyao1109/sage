@@ -1,5 +1,41 @@
 # SAGE-MAS
 
+ALFWorld now defaults to bounded Executor delegation (`sage.executor_dispatch.mode:
+turn`). Executor remains the episode owner. After each real environment result,
+retrieval proposes skills, an applicability call filters the BM25 shortlist, and
+Executor can choose itself or one eligible specialist for one action. A single
+eligible specialist is not automatically selected. Only that turn's selected
+skill revision is mounted. The next observation returns to Executor; different
+specialists can work on successive turns. There is no parallel environment action
+or independent subagent background process. `max_delegated_turns` defaults to 20
+per episode. Malformed plans keep control with Executor and mount no selected skill.
+
+The default retrieval path now searches `skill_recall_top_k` candidates (8), then
+semantically selects at most `max_injected_skills` (2). The selection prompt checks
+operation, target, tool, conditions, prior progress and local effect, and requires
+an exact context quote. Empty/error selections mount nothing. This fixes direct
+mounting of lexical hits; it does not add embedding recall or rescue zero-overlap
+skills outside the BM25 shortlist. Configure `sage.online.skill_recall_semantic_filter:
+false` only for an explicit raw-BM25 control. `sage.executor_dispatch.mode: episode`
+retains whole-task dispatch. Forced-injection probes and hard-controller ablations
+retain their existing episode path. Both switches are independent.
+
+Trajectory `skill_retrieval` records now include shortlist, semantic selection,
+parse errors, selected/adopted names, and `turn_dispatch` with actor, owned skill,
+bounded objective, expected observation, raw response, budget and token usage.
+`assigned_primary_agent` stays Executor in turn mode; `actions_by_agent` records
+actual actors, and `dispatch_evidence.turns` contains the routing decisions. A
+specialist action does not become a full-task specialist win in onboarding stats.
+
+`action_protocol` is the sole executable sequence. Trajectories and confirmed
+transitions may annotate matching observation hints, but cannot replace it with
+search detours. Versioned fingerprints rebuild old/mismatched caches on access
+without discarding prior credit. The canonical sequence is not cut at 16 steps;
+full soft cards also preserve terminal steps. Brief cues may still be shortened.
+The additional selection/dispatch calls are counted in evaluation token costs.
+Regression tests use scripted models and a simulated environment; online outcome
+improvements still require matched evaluation runs.
+
 The online pipeline has one skill lifecycle:
 
 ```text
@@ -60,6 +96,33 @@ Each online round persists:
 - an `ExperienceDistributionSnapshot`;
 - compiled capability contracts and organization edits;
 - old/new organization shadow results when an edit is proposed.
+
+## Small 60-task evolution run
+
+`sage_config.online60_6x10.yaml` runs 10 segments of 6 training tasks and
+validates after each segment on a fixed 12-task `valid_unseen` pool.
+`sage.online.val_eval.game_selection: family_proportional` samples two tasks
+per family (six families) with a fixed seed. The pool is saved in
+`online_state.json` under `val_pool`; validation records do not enter the
+distillation trajectory window. This costs 60 training and 120 validation
+episodes, excluding any organization probes. Use a fresh output directory.
+Reserve the remaining OOD tasks for a separate final test.
+
+For a fresh WSL checkout, copy `examples/prompt_agent/llm_config.example.yaml`
+to `examples/prompt_agent/llm_config.alfworld.local.yaml` and configure the API
+endpoint and key in that private file. Both `*.local.yaml` configurations and
+local virtual environments are ignored by Git. From PowerShell run:
+
+```powershell
+wsl -d Ubuntu -- bash /mnt/d/sage/examples/sage_mas/run_alfworld_wsl.sh setup
+wsl -d Ubuntu -- bash /mnt/d/sage/examples/sage_mas/run_alfworld_wsl.sh run
+```
+
+Adjust the checkout path when it is not `D:\sage`. `setup` installs a dedicated
+WSL environment and downloads missing data; `run` checks dependencies and data,
+uses the ALFWorld-only key, and writes console output to the new run's `run.log`.
+It does not operate on Windows telecom processes. API connectivity and model
+access still depend on the configured endpoint and account.
 
 ## Run all 134 valid_unseen tasks
 

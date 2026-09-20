@@ -27,9 +27,8 @@ class SkillBank:
         # instead of being merged into a near-duplicate. This lets the skill
         # cluster archive observe variant births and lets the credit system
         # select between siblings, matching the SAGE "birth then selection"
-        # loop. Identical skills still collapse because _find_duplicate
-        # returns the exact same object reference; only near-duplicates
-        # that would otherwise be absorbed are kept as separate entries.
+        # loop. The same skill_id remains one persisted identity; distinct
+        # IDs stay separate even when their names/capabilities coincide.
         disable_merge: bool = False,
     ):
         self.path = Path(path)
@@ -53,7 +52,9 @@ class SkillBank:
             return False
 
         duplicate = self._find_duplicate(skill)
-        if duplicate is not None and not self.disable_merge:
+        if duplicate is skill:
+            return False
+        if duplicate is not None and (not self.disable_merge or duplicate.skill_id == skill.skill_id):
             duplicate.evidence_ids = sorted(set(duplicate.evidence_ids + skill.evidence_ids))
             duplicate.support_count = max(
                 len(duplicate.evidence_ids),
@@ -186,6 +187,11 @@ class SkillBank:
         return self._find_duplicate(candidate)
 
     def _find_duplicate(self, candidate: Skill) -> Skill | None:
+        # Identity must win over a semantically similar earlier sibling.
+        # With merging disabled, a capability/name match is NOT an alias.
+        exact = next((skill for skill in self.skills if skill.skill_id == candidate.skill_id), None)
+        if exact is not None or self.disable_merge:
+            return exact
         candidate_text = f"{candidate.skill_name} {candidate.description}".lower()
         for existing in self.skills:
             if not self._metadata_compatible(existing, candidate):

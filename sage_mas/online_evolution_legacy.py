@@ -33,6 +33,7 @@ from sage_mas.alfworld_evaluator import (
     AlfWorldOrganizationEvaluator,
     EvaluationTrial,
     sample_alfworld_gamefiles,
+    select_family_proportional_gamefiles,
     select_prompt_agent_gamefiles,
 )
 from sage_mas.distribution_stats import (
@@ -168,6 +169,7 @@ class OnlineEvolutionConfig:
     val_eval_enabled: bool = False
     val_pool_size: int = 10
     val_eval_dataset: str = "valid_seen"
+    val_game_selection: str = "shuffle"
     val_eval_every_segment: bool = False
     val_eval_every_n_segments: int = 0
 
@@ -699,6 +701,9 @@ class OnlineAlfWorldEvolution:
                     "valid_seen",
                 )
             ).lower(),
+            val_game_selection=str(
+                (online_cfg.get("val_eval") or {}).get("game_selection", "shuffle")
+            ).strip().lower(),
             val_eval_every_segment=bool(
                 (online_cfg.get("val_eval") or {}).get(
                     "every_segment",
@@ -2008,6 +2013,7 @@ class OnlineAlfWorldEvolution:
                         ),
                         "val_pool_size": self.config.val_pool_size,
                         "val_eval_dataset": self.config.val_eval_dataset,
+                        "val_game_selection": self.config.val_game_selection,
                         "val_eval_every_segment": (
                             self.config.val_eval_every_segment
                         ),
@@ -2134,6 +2140,7 @@ class OnlineAlfWorldEvolution:
         pool_size: int,
         excluded: set[str] | None = None,
         seed_offset: int = 42,
+        game_selection: str = "shuffle",
     ) -> list[str]:
         if pool_size <= 0:
             return []
@@ -2152,6 +2159,12 @@ class OnlineAlfWorldEvolution:
                 str(path) for path in dataset_root.rglob("game.tw-pddl")
             )
             pool = [gamefile for gamefile in pool if gamefile not in excluded]
+        if game_selection == "family_proportional":
+            return select_family_proportional_gamefiles(
+                sorted(pool), pool_size, seed=self.config.seed + seed_offset
+            )
+        if game_selection != "shuffle":
+            raise ValueError(f"Unknown held-out game_selection={game_selection!r}")
         if not pool:
             return []
         import random
@@ -2177,6 +2190,7 @@ class OnlineAlfWorldEvolution:
             pool_size=self.config.val_pool_size,
             excluded=excluded,
             seed_offset=91,
+            game_selection=self.config.val_game_selection,
         )
 
     def _ensure_test_pool(self, state: dict[str, Any]) -> None:
@@ -2212,6 +2226,7 @@ class OnlineAlfWorldEvolution:
                 self.config.val_pool_size
             )
             state["config"]["val_eval_dataset"] = self.config.val_eval_dataset
+            state["config"]["val_game_selection"] = self.config.val_game_selection
             state["config"]["val_eval_every_segment"] = (
                 self.config.val_eval_every_segment
             )
@@ -3278,6 +3293,7 @@ class OnlineAlfWorldEvolution:
             max_injected_skills=int(_get("max_injected_skills", 2)),
             skill_recall_backend=str(_get("skill_recall_backend", "bm25")),
             skill_recall_top_k=int(_get("skill_recall_top_k", 8)),
+            skill_recall_semantic_filter=bool(_get("skill_recall_semantic_filter", True)),
             skill_recall_query_llm=bool(_get("skill_recall_query_llm", True)),
             use_visited_location_memory=False,
             ignore_assigned_skills=bool(

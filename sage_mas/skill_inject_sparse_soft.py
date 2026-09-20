@@ -28,7 +28,7 @@ def _history_actions(history_steps: list[Any] | None) -> list[str]:
     return actions
 
 
-def _protocol_lines(skill: Skill, *, max_steps: int = 10) -> list[str]:
+def _protocol_lines(skill: Skill, *, max_steps: int | None = None) -> list[str]:
     steps = ensure_executable_protocol(skill)
     if steps:
         lines = [
@@ -42,7 +42,7 @@ def _protocol_lines(skill: Skill, *, max_steps: int = 10) -> list[str]:
             for item in (skill.action_protocol or [])
             if str(item).strip()
         ]
-    return lines[: max(1, int(max_steps))]
+    return lines if max_steps is None else lines[: max(1, int(max_steps))]
 
 
 def _search_prior_names(skill: Skill, *, max_sources: int = 2) -> str:
@@ -93,7 +93,7 @@ def _anti_pattern_lines(skill: Skill, *, max_patterns: int = 2) -> list[str]:
 def render_soft_skill_block(
     skills: list[Skill],
     *,
-    max_protocol_steps: int = 10,
+    max_protocol_steps: int | None = None,
 ) -> str:
     """Soft SOP only: reference handbook, no ``Now Step k/N`` cursor."""
     if not skills:

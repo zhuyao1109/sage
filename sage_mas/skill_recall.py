@@ -4,8 +4,8 @@ Each step the Executor may write a capability query from the *current*
 observation. That query searches the whole skill bank with BM25 over the
 learned operation (capability name and protocol steps). Shared template
 words are dropped, so a query that does not name the operation scores
-zero and mounts nothing. ``<query>none</query>`` mounts nothing. There is no episode-level frozen catalog and no
-second selection pass over a fixed menu.
+zero and mounts nothing. ``<query>none</query>`` mounts nothing. The evaluator
+semantically filters the per-turn BM25 shortlist before mounting any skill.
 
 The scoring backend is pluggable; BM25 is the built-in default because it is
 dependency-free and deterministic. An embedding backend can implement the

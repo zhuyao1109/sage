@@ -240,6 +240,7 @@ class MASRuntime:
         # the skills the Executor selected, so an empty active-assigned set
         # means "mount nothing" instead of falling back to all assigned skills.
         strict_skill_selection: bool = False,
+        turn_delegation: bool = False,
         # Optional mid/deploy model for non-Executor agents (e.g. flash specialists
         # while Executor/teacher play stays on ``backend``).
         specialist_backend: ChatBackend | None = None,
@@ -260,6 +261,7 @@ class MASRuntime:
         self.skill_by_name = {skill.skill_name: skill for skill in skills}
         self.injected_skills = injected_skills or []
         self.max_advisors = max_advisors
+        self.turn_delegation = turn_delegation
         self.max_observation_chars = max_observation_chars
         self.prompt_style = prompt_style
         # Kept for API compatibility; expert action rewriting is disabled.
@@ -666,12 +668,16 @@ class MASRuntime:
                         parts.append(guidance)
             return "\n\n".join(parts)
 
-        # A dispatched specialist owns the whole episode. Give it all verified
-        # assigned contracts even before a step-level precondition activates.
+        # Bounded delegates receive only the selected contract. Explicit episode
+        # dispatch retains the legacy full assigned-skill prompt.
+        selected_pool = (list(injected_skills or []) if self.turn_delegation
+                         else self._resolve_agent_skills(active_actor, None))
         skills = [
             skill
-            for skill in self._resolve_agent_skills(active_actor, None)
+            for skill in selected_pool
             if skill.status == SkillStatus.VERIFIED
+            and (not self.turn_delegation or (skill.skill_name in (active_assigned_skill_names or set())
+                                             and skill.skill_name in active_actor.assigned_skills))
         ]
         if skills:
             rendered = self._render_skills_contextual(
@@ -683,9 +689,9 @@ class MASRuntime:
                 history_steps=history_steps,
             )
             parts.append(
-                "Complete the stated environment task end-to-end with "
-                "admissible actions.\n\n"
-                "Active skill patch:\n"
+                ("Perform only the bounded next action assigned by Executor, then return control.\n\n"
+                 if self.turn_delegation else "Complete the stated environment task end-to-end with admissible actions.\n\n")
+                + "Active skill patch:\n"
                 f"{rendered or self._render_skills(skills)}"
             )
             guidance = self._executable_step_guidance(
