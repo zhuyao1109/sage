@@ -40,7 +40,7 @@ def parse_plan(text: str, *, actors: set[str], skill_ids: set[str], fallback: st
                         reason=str(data.get('reason') or '')[:800],
                         expected_result=str(data.get('expected_result') or '')[:800],
                         execution_id=str(data.get('execution_id') or ''),
-                        disposition=data.get('disposition') if data.get('disposition') in {'continue','pause','abandon'} else 'continue',
+                        disposition=data.get('disposition') if data.get('disposition') in {'continue','pause','abandon','start'} else 'continue',
                         step_update=data.get('step_update') if isinstance(data.get('step_update'), dict) else {})
     except (ValueError, TypeError):
         return TurnPlan(actor=fallback, reason='invalid_plan_fallback')
@@ -57,7 +57,7 @@ def coordination_prompt(*, context: str, cards: str, agents: list[AgentSpec], ow
         'operations. Use observed evidence, not assumptions, to bind objects and assess prerequisites. '
         'Keep an unfinished execution across turns by execution_id. Only one skill execution owns a turn. '
         'Adopt at most one skill; pause other executions explicitly when switching. An empty selection continues '
-        'the current execution unless disposition is pause or abandon. Do not redo observed steps or skip dependencies. '
+        'the current execution unless disposition is pause or abandon. Use disposition start for a deliberately new invocation after completion. Do not redo observed steps or skip dependencies. '
         'For a waiting user step, review the actual feedback and set step_update with execution_id, step_index, '
         'verdict (observed or failed), and the exact feedback_ref as evidence_ref. Tool steps advance only from tool results. '
         'A proposed expected result is not a verified result. Domain policy remains binding. '

@@ -40,6 +40,18 @@ def execution_outcomes(trajectory):
             expected_effect='', domain=trajectory.domain, action_protocol=[s['instruction'] for s in instance['steps']])
         own_events = [{'adopted_skill_ids': [sk.skill_id], 'tool_calls': [{'id':cid} for cid in ids]}]
         verdict = local_skill_outcome(sk, clone, own_events)
+        step_complete = []
+        for step in instance['steps']:
+            if step['requestor'] == 'user' or step['tool'] is None:
+                user_observed = any(c.get('name') == step['tool'] and c.get('result') is not None and not c.get('result_error')
+                                    for c in clone.metadata['interaction_sequence'])
+                step_complete.append(step['status'] == 'reported' or user_observed)
+            else:
+                cids = {a['call_id'] for a in step.get('attempts', [])}
+                step_complete.append(any(t.tool_call_id in cids and t.result_content is not None and not t.result_error for t in actual))
+        if verdict['success'] is True and not all(step_complete):
+            verdict = {'success': False if not trajectory.success else None, 'executed': bool(actual),
+                       'outcome': 'execution_incomplete'}
         check_keys = {json.dumps(c['action'], sort_keys=True) for c in checks
                       if c.get('action_match') and any(s.name == c['action'].get('name') and all(
                           s.arguments.get(k) == v for k,v in c['action'].get('arguments', {}).items()) for s in actual)}
@@ -52,6 +64,13 @@ def execution_outcomes(trajectory):
         elif verdict['success'] is True:
             used_checks.update(check_keys)
             verdict['outcome'] = 'verified_local_operation'
+        for user_call in clone.metadata['interaction_sequence']:
+            if user_call.get('requestor') == 'user' and verdict['success'] is True:
+                key = json.dumps({'requestor':'user', 'name':user_call.get('name'), 'arguments':user_call.get('arguments')}, sort_keys=True)
+                if key in used_checks:
+                    verdict = {'success': None, 'executed': True, 'outcome': 'verification_already_attributed'}
+                else:
+                    used_checks.add(key)
         actors = {a['actor'] for step in instance['steps'] for a in step.get('attempts', [])}
         actors.update(s['guidance_actor'] for s in instance['steps'] if s.get('guidance_actor'))
         outcomes.append({**verdict, 'execution_id': iid, 'skill_id': sk.skill_id,

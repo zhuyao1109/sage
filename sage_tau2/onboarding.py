@@ -260,7 +260,10 @@ def refresh_delegated_statuses(organization, trajectories, skills, *, policy=Non
     from sage_tau2.contracts import local_skill_outcome
     pol = policy or OnboardingPolicy()
     bank = {s.skill_id: s for s in skills}
-    decisions = []
+    from sage_tau2.lifecycle import refresh_instance_statuses
+    modern = [t for t in trajectories if any(e.get('version') == 2 for e in t.metadata.get('skill_events') or [])]
+    decisions = refresh_instance_statuses(organization, modern, pol)
+    trajectories = [t for t in trajectories if t not in modern]
     for agent in organization.agents:
         if agent.name == EXECUTOR_NAME:
             continue

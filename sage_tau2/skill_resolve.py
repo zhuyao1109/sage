@@ -129,11 +129,9 @@ def heal_assigned_skill_refs(
         want = _cap_key(dead)
         if not want:
             return None
-        cands = [
-            s
-            for s in skills
-            if s.status in _ACTIVE_STATUSES and _cap_key(s) == want
-        ]
+        from sage_tau2.solutions import solution_fingerprint
+        cands = [s for s in skills if s.status in _ACTIVE_STATUSES and _cap_key(s) == want
+                 and s.domain == dead.domain and solution_fingerprint(s) == solution_fingerprint(dead)]
         if not cands:
             return None
         cands.sort(

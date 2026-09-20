@@ -136,7 +136,8 @@ def record_action(instance, message):
                 args = {}
         if not (step and step['requestor'] == 'assistant' and step['tool'] == fn.get('name')
                 and step['status'] in {'pending', 'failed'} and cid):
-            instance['violations'].append({'call_id': cid, 'reason': 'call_outside_ready_step', 'tool': fn.get('name')})
+            if fn.get('name') in writes or any(s['tool'] == fn.get('name') for s in instance['steps']):
+                instance['violations'].append({'call_id': cid, 'reason': 'call_outside_ready_step', 'tool': fn.get('name')})
             continue
         if fn.get('name') in writes:
             for key, value in args.items():
@@ -180,3 +181,24 @@ def execution_snapshots(events):
         for instance in event.get('executions', []):
             result[instance['execution_id']] = copy.deepcopy(instance)
     return list(result.values())
+
+def action_is_ready(instance, message):
+    """Prevent dependent mutations from being emitted before observations arrive."""
+    if instance is None:
+        return True
+    from sage_tau2.distill import primary_write_names
+    step = next_step(instance)
+    ready_claimed = False
+    known = {s['tool'] for s in instance['steps'] if s['requestor'] == 'assistant'}
+    for call in message.get('tool_calls') or []:
+        fn = call.get('function') or call
+        name = fn.get('name')
+        constrained = name in known or bool(primary_write_names([str(name) + '()']))
+        if not constrained:
+            continue  # Additional read-only evidence gathering is permitted.
+        if not step or step['requestor'] != 'assistant' or step['tool'] != name or ready_claimed:
+            return False
+        if step['status'] not in {'pending', 'failed'}:
+            return False
+        ready_claimed = True
+    return True

@@ -266,7 +266,7 @@ class SageTau2Agent(
         is_specialist = self.agent_role_name != EXECUTOR_NAME
         instruction = instruction_for_agent(
             domain=self.domain or os.environ.get("SAGE_TAU2_DOMAIN"),
-            specialist=is_specialist,
+            specialist=is_specialist, delegated=False,
         )
         role_line = f"Active role name: {self.agent_role_name}.\n"
         return SYSTEM_PROMPT.format(
@@ -428,6 +428,8 @@ class SageTau2Agent(
             requested = next((e for e in state.executions if e['execution_id'] == plan.execution_id and e['status'] not in TERMINAL), None)
             if requested:
                 plan.adopted_skill_ids = [requested['skill_id']]
+        if previous and previous['status'] in TERMINAL and plan.disposition == 'continue' and previous['skill_id'] in plan.adopted_skill_ids:
+            plan.adopted_skill_ids = []
         self._turn_skills = [sk for sk in offered if sk.skill_id in plan.adopted_skill_ids][:1]
         selected_actor = next((a for a in delegates if a.name == plan.actor), None)
         if selected_actor and not resolve_assigned_skills(selected_actor.assigned_skills, self._turn_skills):
@@ -446,7 +448,7 @@ class SageTau2Agent(
         llm_messages, window_prompt, window_meta = self._llm_messages_and_window(state)
         directive = (f"Active actor for this turn: {plan.actor}. Assigned subtask: {plan.subtask}. "
                      f"Expected observable result: {plan.expected_result}. "
-                     "Execute only the next turn, then return control to Executor. "
+                     f"Execute only the next ready step, then return control to {self.agent_role_name}. "
                      "Do not report an expected result as an observed fact.")
         delegate = next((a for a in delegates if a.name == plan.actor), None)
         if delegate is not None:
@@ -466,7 +468,20 @@ class SageTau2Agent(
                 call_name="sage_tau2_agent",
                 **self.llm_args,
             )
-            return guard_assistant_message(raw, tools=self.tools)
+            guarded = guard_assistant_message(raw, tools=self.tools)
+            from sage_tau2.execution import action_is_ready, next_step
+            if not action_is_ready(current, self._message_to_dict(guarded)):
+                self._record_auxiliary_call("dependency_rejected_attempt", raw)
+                correction = UserMessage(role="user", content=(
+                    "That tool batch violates an unresolved skill dependency. "
+                    f"The ready step is {next_step(current)}. Gather evidence or execute only this step; wait for its result."))
+                retry = generate(model=self.llm, tools=self.tools, messages=call_messages + [correction],
+                                 call_name="sage_tau2_dependency_retry", **self.llm_args)
+                guarded = guard_assistant_message(retry, tools=self.tools)
+                if not action_is_ready(current, self._message_to_dict(guarded)):
+                    self._record_auxiliary_call("dependency_rejected_attempt", retry)
+                    return AssistantMessage(role="assistant", content="I need to confirm the pending step before continuing.")
+            return guarded
 
         # Non-empty payload first (existing guard).
         assistant_message = ensure_assistant_payload(
@@ -718,7 +733,7 @@ def _parse_allowed_skill_ids(raw: Any) -> set[str] | None:
     return out or None
 
 
-def _role_block_for(agent: AgentSpec) -> str:
+def _role_block_for(agent: AgentSpec, *, delegated: bool = True) -> str:
     if agent.name == EXECUTOR_NAME:
         return ""
     lines = ["<active_specialist>"]
@@ -735,6 +750,7 @@ def _role_block_for(agent: AgentSpec) -> str:
         )
     lines.append(
         "Execute the assigned objective using observed evidence. Return actual results and unresolved work to Executor after this turn."
+        if delegated else "Own this evaluation episode through completion, using the same complete skills as the Executor control."
     )
     lines.append("</active_specialist>")
     return "\n".join(lines)
@@ -916,7 +932,7 @@ def create_sage_tau2_agent(tools, domain_policy, **kwargs):
     if is_specialist:
         # Specialists still see org roster for context in journal; prompt omits it.
         pass
-    role_block = _role_block_for(primary)
+    role_block = _role_block_for(primary, delegated=False)
 
     # Load prior-attempt verdict feedback for this specific task (retry only).
     prior_hint = ""

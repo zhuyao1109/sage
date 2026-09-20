@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sage_tau2.solutions import ordered_protocol, solution_contract, solution_distance, solution_fingerprint
 from sage_tau2.schemas import SkillStatus, Tau2Skill
 from sage_tau2.serialization import read_json, write_json
 from sage_tau2.task_context import organizational_capability_key
@@ -28,15 +29,8 @@ def _protocol_set(protocol: list[str]) -> set[str]:
 
 
 def protocol_novelty(left: list[str], right: list[str]) -> float:
-    """Jaccard distance on tool names in [0, 1]."""
-    a, b = _protocol_set(left), _protocol_set(right)
-    if not a and not b:
-        return 0.0
-    if not a or not b:
-        return 1.0
-    inter = len(a & b)
-    union = len(a | b)
-    return 1.0 - (inter / float(union))
+    """Ordered solution distance, including repeated operations and arguments."""
+    return solution_distance({'protocol': ordered_protocol(left)}, {'protocol': ordered_protocol(right)})
 
 
 def _cluster_id(capability_key: str, leader_skill_id: str) -> str:
@@ -54,6 +48,9 @@ class SkillCluster:
     birth_event: str
     member_skill_ids: list[str] = field(default_factory=list)
     segment_stats: list[dict[str, Any]] = field(default_factory=list)
+    solution: dict[str, Any] = field(default_factory=dict)
+    member_fingerprints: dict[str, str] = field(default_factory=dict)
+    domain: str = ""
 
 
 @dataclass
@@ -116,96 +113,45 @@ class SkillClusterArchive:
         )
         by_id = {s.skill_id: s for s in ordered}
 
+        # Upgrade legacy archives from their surviving leader, without trusting
+        # old set-based memberships. Every active member is checked again.
+        for cluster in self.clusters:
+            if not cluster.solution:
+                leader = by_id.get(cluster.leader_skill_id)
+                cluster.solution = solution_contract(leader) if leader else {'protocol': ordered_protocol(cluster.protocol_template)}
+                cluster.domain = leader.domain if leader else ''
+            cluster.member_skill_ids = [sid for sid in cluster.member_skill_ids if sid in by_id]
         for skill in ordered:
+            contract = solution_contract(skill)
+            fingerprint = solution_fingerprint(skill)
             existing = self.cluster_of(skill.skill_id)
-            if existing is not None:
-                report.events.append(
-                    ClusterEvent(
-                        segment=segment,
-                        event=EVENT_ASSIGNED,
-                        skill_id=skill.skill_id,
-                        skill_name=skill.skill_name,
-                        capability_key=organizational_capability_key(skill)
-                        or skill.capability_key,
-                        cluster_id=existing.cluster_id,
-                        novelty=0.0,
-                    )
-                )
+            if existing and existing.member_fingerprints.get(skill.skill_id) == fingerprint:
+                report.events.append(ClusterEvent(segment, EVENT_ASSIGNED, skill.skill_id,
+                    skill.skill_name, existing.capability_key, existing.cluster_id, 0.0))
                 continue
-
-            capability = (
-                organizational_capability_key(skill)
-                or skill.capability_key
-                or "tau2.unknown"
-            )
-            peers = self.clusters_for_capability(capability)
-            if not peers:
-                cluster = SkillCluster(
-                    cluster_id=_cluster_id(capability, skill.skill_id),
-                    capability_key=capability,
-                    leader_skill_id=skill.skill_id,
-                    protocol_template=list(skill.action_protocol or []),
-                    born_segment=segment,
-                    birth_event=BIRTH_CAPABILITY,
-                    member_skill_ids=[skill.skill_id],
-                )
-                self.clusters.append(cluster)
-                report.events.append(
-                    ClusterEvent(
-                        segment=segment,
-                        event=BIRTH_CAPABILITY,
-                        skill_id=skill.skill_id,
-                        skill_name=skill.skill_name,
-                        capability_key=capability,
-                        cluster_id=cluster.cluster_id,
-                        novelty=1.0,
-                    )
-                )
-                continue
-
-            best: SkillCluster | None = None
-            best_nov = 1.0
-            for peer in peers:
-                nov = protocol_novelty(skill.action_protocol, peer.protocol_template)
-                if nov < best_nov:
-                    best_nov = nov
-                    best = peer
-            if best is not None and best_nov <= self.novelty_threshold:
+            if existing:
+                existing.member_skill_ids.remove(skill.skill_id)
+                existing.member_fingerprints.pop(skill.skill_id, None)
+            capability = organizational_capability_key(skill) or skill.capability_key or 'tau2.unknown'
+            peers = [c for c in self.clusters_for_capability(capability) if c.domain == skill.domain]
+            best = min(peers, key=lambda c: solution_distance(contract, c.solution), default=None)
+            novelty = solution_distance(contract, best.solution) if best else 1.0
+            if best and novelty <= self.novelty_threshold:
                 if skill.skill_id not in best.member_skill_ids:
                     best.member_skill_ids.append(skill.skill_id)
-                report.events.append(
-                    ClusterEvent(
-                        segment=segment,
-                        event=EVENT_ASSIGNED,
-                        skill_id=skill.skill_id,
-                        skill_name=skill.skill_name,
-                        capability_key=capability,
-                        cluster_id=best.cluster_id,
-                        novelty=best_nov,
-                    )
-                )
+                best.member_fingerprints[skill.skill_id] = fingerprint
+                event = EVENT_ASSIGNED
+                cluster = best
             else:
-                cluster = SkillCluster(
-                    cluster_id=_cluster_id(capability, skill.skill_id),
-                    capability_key=capability,
-                    leader_skill_id=skill.skill_id,
-                    protocol_template=list(skill.action_protocol or []),
-                    born_segment=segment,
-                    birth_event=BIRTH_VARIANT,
-                    member_skill_ids=[skill.skill_id],
-                )
+                event = BIRTH_VARIANT if peers else BIRTH_CAPABILITY
+                cluster = SkillCluster(cluster_id=_cluster_id(capability, skill.domain + fingerprint),
+                    capability_key=capability, leader_skill_id=skill.skill_id,
+                    protocol_template=list(skill.action_protocol), born_segment=segment,
+                    birth_event=event, member_skill_ids=[skill.skill_id], solution=contract,
+                    member_fingerprints={skill.skill_id: fingerprint}, domain=skill.domain)
                 self.clusters.append(cluster)
-                report.events.append(
-                    ClusterEvent(
-                        segment=segment,
-                        event=BIRTH_VARIANT,
-                        skill_id=skill.skill_id,
-                        skill_name=skill.skill_name,
-                        capability_key=capability,
-                        cluster_id=cluster.cluster_id,
-                        novelty=best_nov,
-                    )
-                )
+            report.events.append(ClusterEvent(segment, event, skill.skill_id, skill.skill_name,
+                                             capability, cluster.cluster_id, novelty))
 
         # Refresh segment snapshots.
         for cluster in self.clusters:

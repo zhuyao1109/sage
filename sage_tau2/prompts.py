@@ -20,7 +20,7 @@ Rules:
 2. Prefer grounded tools over invented facts.
 3. Learned skills are candidates. Check their conditions against observed facts,
    bind objects from tool results, preserve dependencies, and verify effects.
-   Skip inapplicable steps; report missing evidence or unresolved work.
+   Skip inapplicable steps only by pausing or abandoning their execution; report missing evidence or unresolved work.
 4. Each turn: either talk to the user OR call tool(s), never both.
 5. Only call tools from your agent toolkit. Phone/device actions named in the
    policy (status bar, airplane mode, SIM reseat, speed test, APN, app
@@ -44,9 +44,12 @@ Rules:
 """.strip()
 
 
-def instruction_for_agent(*, domain: str | None, specialist: bool) -> str:
+def instruction_for_agent(*, domain: str | None, specialist: bool, delegated: bool = True) -> str:
     """Pick executor/specialist instruction (single family; domain unused)."""
     del domain  # one instruction family for all domains
+    if specialist and not delegated:
+        return ("You are the specialist episode owner in a paired evaluation. Own the full task through final validation.\n\nRules:"
+                + SPECIALIST_INSTRUCTION.split("Rules:", 1)[1])
     return SPECIALIST_INSTRUCTION if specialist else EXECUTOR_INSTRUCTION
 
 

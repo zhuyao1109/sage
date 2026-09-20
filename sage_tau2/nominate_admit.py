@@ -214,8 +214,12 @@ def propose_add_agents(
         org_capability = (
             organizational_capability_key(leader) or cluster.capability_key
         )
-        if nom.add_when_uncovered_capability and organization.has_carrier(
-            org_capability
+        # Ownership belongs to a solution cluster, not to every solution using
+        # the same write tool. A different variant may nominate its own expert.
+        if nom.add_when_uncovered_capability and any(
+            a.metadata.get("cluster_id") == cluster.cluster_id
+            or (not a.metadata.get("cluster_id") and set(a.assigned_skills) & {s.skill_id for s in members})
+            for a in organization.specialists()
         ):
             continue
 
@@ -223,6 +227,8 @@ def propose_add_agents(
         if any(e.new_agent and e.new_agent.name == name for e in edits):
             name = f"{name}_{cluster.cluster_id[-4:]}"
         if any(a.name == name for a in organization.agents):
+            name = f"{name}_{cluster.cluster_id[-6:]}"
+        if any(a.name == name and a.acting_status != 'dormant' for a in organization.agents):
             continue
 
         dispatch_only = bool(nom.dispatch_only_new_agents)
@@ -244,10 +250,11 @@ def propose_add_agents(
             assigned_skills=[s.skill_id for s in members],
             capability_keys=[org_capability],
             tool_permissions=["env_action", "tau2_tools"],
-            activation_condition=leader.precondition[:300],
+            activation_condition=(leader.metadata.get("execution_contract") or {}).get("condition") or leader.precondition,
             role_specification=(
-                f"Specialist for {org_capability}. "
-                f"Primary protocol: {' -> '.join(leader.action_protocol[:8])}."
+                f"Specialist for solution cluster {cluster.cluster_id} of {org_capability}. "
+                "Use the complete owned skill contract and persistent execution state. "
+                "Report observations, blocked dependencies, and unresolved work to Executor."
             ),
             acting_status="probation",
             agent_id=str(uuid4()),
@@ -392,6 +399,10 @@ def apply_admission(
             specialist.metadata["dispatch_only"] = False
             record["promotion_probe_passed"] = True
             record["dispatch_only"] = False
+        if record.get("same_skill_probe_passed"):
+            from sage_tau2.lifecycle import specialist_revision
+            from sage_tau2.skill_resolve import resolve_assigned_skills
+            record["admitted_solution_revision"] = specialist_revision(resolve_assigned_skills(specialist.assigned_skills, skills))
         specialist.shadow_evaluation_record = record
         organization.apply_edit(edit)
         # Spec / credit admission may stamp VERIFIED. editor_commit must NOT —
@@ -465,6 +476,7 @@ def apply_admission(
     record = dict(specialist.shadow_evaluation_record or {})
     record["nominate_admit_awaiting_admission"] = False
     record["promotion_probe_passed"] = False
+    record["same_skill_probe_passed"] = False
     record["dispatch_only"] = True
     record["last_nominate_admit"] = dict(result)
     if action == "dormant":
@@ -499,12 +511,17 @@ def run_nominate_admit(
 ) -> dict[str, Any]:
     """Nominate → (optional) Spec-vs-Exec admit, matching sage_mas staging."""
     cfg = config or NominateAdmitConfig()
+    from sage_tau2.lifecycle import reconcile_specialists
+    revalidations = reconcile_specialists(organization, archive, skills, domain=cfg.nomination.require_same_domain)
     proposals = propose_add_agents(
         organization=organization,
         archive=archive,
         skills=skills,
         config=cfg,
     )
+    if cfg.admission.enable_spec_vs_exec:
+        candidates = revalidations + [e for e in proposals if e.edit_type != OrganizationEditType.DO_NOTHING]
+        proposals = candidates[:max(0, cfg.nomination.max_new_agents_per_round)] or proposals
     admissions: list[dict[str, Any]] = []
     accepted_agents: list[str] = []
     for edit in proposals:
